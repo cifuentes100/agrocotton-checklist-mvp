@@ -2,25 +2,33 @@ import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/")({
   component: Index,
+  head: () => ({
+    meta: [
+      { title: "AgroCotton Serviços" },
+      {
+        name: "description",
+        content:
+          "Sistema de checklist para colheitadeiras de algodão — MVP em construção.",
+      },
+    ],
+  }),
 });
 
-// IMPORTANT: Replace this placeholder. For sites with multiple pages (About, Services, Contact, etc.),
-// create separate route files (about.tsx, services.tsx, contact.tsx) — don't put all pages in this file.
-function PlaceholderIndex() {
-  return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
-  );
-}
-
 function Index() {
-  return <PlaceholderIndex />;
+  return (
+    <main
+      className="flex min-h-screen flex-col items-center justify-center px-6 text-center"
+      style={{ backgroundColor: "#0f172a" }}
+    >
+      <h1
+        className="text-5xl font-extrabold tracking-tight sm:text-7xl"
+        style={{ color: "#25D366" }}
+      >
+        AgroCotton
+      </h1>
+      <p className="mt-6 max-w-xl text-base text-slate-300 sm:text-lg">
+        Sistema de checklist para colheitadeiras de algodão — MVP em construção.
+      </p>
+    </main>
+  );
 }
