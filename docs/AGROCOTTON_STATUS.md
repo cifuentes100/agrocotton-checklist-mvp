@@ -1,0 +1,147 @@
+# AgroCotton Serviços — Status do Projeto
+
+> **Documento vivo.** Atualizado conforme a execução avança. A seção "Progresso" é a
+> fonte de verdade sobre onde estamos. Decisões arquiteturais ficam em
+> `AGROCOTTON_DECISIONS_LOG.md`.
+
+**Última atualização:** 2026-04-23
+**Fase atual:** Construção — Autenticação do web app
+**Próximo marco:** Login email/senha funcionando para 3 perfis técnicos
+
+---
+
+## 🎯 Visão geral do projeto
+
+**Cliente:** AgroCotton Serviços (empresa de serviços de colheita de algodão)
+
+**Objetivo MVP:** Sistema de checklist pré-operação para colheitadeiras de algodão,
+com validação do mecânico e backlog administrativo.
+
+**Fluxo principal:**
+```
+05:30 da manhã
+    ↓
+Operador manda "start" no WhatsApp pro bot
+    ↓
+Bot identifica o número → busca na tabela users → reconhece operador
+    ↓
+Operador seleciona máquina → responde 10 itens (OK/NOK + foto)
+    ↓
+Foto NOK vai pro mecânico validar no app web
+    ↓
+"🤠 Vamo cavalo!" ao final
+    ↓
+Admin vê tudo no backlog
+```
+
+---
+
+## 👥 Perfis e canais
+
+| Perfil | Canal | Autenticação |
+|---|---|---|
+| **Operador** | WhatsApp (bot) | ❌ Sem login. Bot identifica pelo telefone cadastrado |
+| **Mecânico** | Web app (Lovable) | ✅ Email + senha |
+| **Admin** | Web app (Lovable) | ✅ Email + senha |
+| **Implantador** | Web app (Lovable) | ✅ Email + senha |
+
+---
+
+## 📐 Stack
+
+- **Frontend:** React 18 + TypeScript + Tailwind + Lovable
+- **Backend:** Supabase (Postgres + Storage + Auth + Realtime)
+- **Bot:** Edge Function Deno + WhatsApp (provider a definir: uazapi ou Cloud API)
+- **Deploy:** Lovable (web) + Supabase (backend) + Edge Functions (bot)
+
+---
+
+## ✅ Progresso
+
+### Infraestrutura
+- [x] Projeto Supabase criado (`agrocotton-mvp`, região São Paulo)
+- [x] Schema SQL executado (8 tabelas + RLS + triggers)
+- [x] Seed dos 10 itens canônicos do checklist (RF-31)
+- [x] Buckets de Storage criados (`checklist-photos`, `reference-photos`)
+- [x] Projeto Lovable criado (`AgroCotton Checklist MVP`)
+- [x] Integração Lovable ↔ Supabase autorizada e funcionando
+- [x] Landing page inicial renderizando
+
+### Aplicação Web (Lovable)
+- [ ] Autenticação por email/senha para mecânico/admin/implantador
+- [ ] Rotas protegidas por perfil
+- [ ] Dashboard Implantador (cadastro de máquinas + fotos de referência)
+- [ ] Dashboard Mecânico (validação de fotos NOK em tempo real)
+- [ ] Dashboard Admin (backlog + dashboard + CRUD)
+
+### Bot WhatsApp (fora do Lovable)
+- [ ] Decisão: uazapi vs WhatsApp Cloud API
+- [ ] Webhook Edge Function (`wa-webhook`)
+- [ ] State machine do operador (seleção de máquina → 10 itens → foto → OK/NOK)
+- [ ] Cron 05:30 (kickoff matinal)
+- [ ] Supervisão passiva em grupo (RF-32)
+- [ ] Relatórios sob demanda (RF-33)
+
+### Testes e validação
+- [ ] Teste end-to-end com operador real da AgroCotton
+- [ ] Teste do mecânico validando fotos reais
+- [ ] Teste do implantador cadastrando uma máquina do zero
+
+---
+
+## 🗺️ Próximos passos imediatos
+
+1. **Configurar autenticação email/senha no Lovable** (Supabase Auth)
+   - Tela de login `/login`
+   - Cadastro de primeiros usuários (via SQL no Supabase, manual)
+   - `ProtectedRoute` por perfil (mecânico/admin/implantador)
+
+2. **Construir tela do Implantador primeiro**
+   - É o primeiro usuário real do sistema
+   - Sem ele, não há máquinas cadastradas nem fotos de referência
+   - Sem isso, operador não tem o que inspecionar
+
+3. **Construir tela do Mecânico**
+   - Fila Realtime de fotos NOK
+   - Validação (aprovar/reprovar + diagnóstico)
+
+4. **Construir Admin**
+   - Backlog + dashboard + CRUD
+
+5. **Construir Bot WhatsApp** (fora do Lovable, em Edge Function)
+   - Decidir provider antes
+   - Espelhar invariantes do SDD (RF-31, RF-03, RF-13, RF-36)
+
+---
+
+## 🚨 Pontos de atenção pendentes
+
+- **Decisão sobre provider do WhatsApp** ainda não foi tomada. Ver
+  `AGROCOTTON_DECISIONS_LOG.md` → ADR-003 (pendente).
+- **Seed de usuários iniciais** no Supabase: precisa definir email/senha/role de pelo
+  menos 1 admin, 1 mecânico e 1 implantador para começar a testar.
+- **Fotos de referência reais** dos 10 itens: precisam ser levantadas em campo pelo
+  implantador na primeira visita à AgroCotton.
+- **Contador de horas de lubrificação (RF-35)**: ainda não existe fonte de dados.
+  Definir: será manual (operador informa) ou integrado com a máquina? MVP provavelmente
+  manual.
+
+---
+
+## 📋 Invariantes SDD (não-negociáveis)
+
+Para referência rápida, as regras que NUNCA podem ser quebradas:
+
+- **RF-31** — sequência imutável de 10 itens do checklist, finalização "Vamo cavalo!"
+- **RF-02/RF-13** — exibir APENAS o padrão correto. Nunca padrão incorreto.
+- **RF-03** — foto nova obrigatória em OK e NOK. Câmera direta; galeria bloqueada.
+- **RF-35** — contador de horas de lubrificação com alerta persistente.
+- **RF-36** — recusa exige justificativa textual ≥ 20 chars, auditável.
+
+---
+
+## 📁 Arquivos relacionados
+
+- `agrocotton_prompts_lovable_revisados.md` — prompts originais SDD revisados
+- `AGROCOTTON_DECISIONS_LOG.md` — log de decisões arquiteturais (ADRs)
+- `AGROCOTTON_STATUS.md` — este arquivo
