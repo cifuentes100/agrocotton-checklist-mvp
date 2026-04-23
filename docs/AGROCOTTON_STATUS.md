@@ -68,8 +68,8 @@ Admin vê tudo no backlog
 - [x] Landing page inicial renderizando
 
 ### Aplicação Web (Lovable)
-- [ ] Autenticação por email/senha para mecânico/admin/implantador
-- [ ] Rotas protegidas por perfil
+- [x] Autenticação por email/senha para mecânico/admin/implantador
+- [x] Rotas protegidas por perfil
 - [ ] Dashboard Implantador (cadastro de máquinas + fotos de referência)
 - [ ] Dashboard Mecânico (validação de fotos NOK em tempo real)
 - [ ] Dashboard Admin (backlog + dashboard + CRUD)
@@ -120,6 +120,18 @@ Admin vê tudo no backlog
   `AGROCOTTON_DECISIONS_LOG.md` → ADR-003 (pendente).
 - **Seed de usuários iniciais** no Supabase: precisa definir email/senha/role de pelo
   menos 1 admin, 1 mecânico e 1 implantador para começar a testar.
+  - ⚠️ A tabela `public.users` **não tem coluna `email`**. O vínculo com `auth.users` é
+    feito pelo `id` (uuid). Portanto, o seed manual deve usar o mesmo `id` do usuário
+    criado no Supabase Auth. Exemplo:
+    ```sql
+    -- Após criar o usuário em Authentication → Users no painel Supabase:
+    INSERT INTO public.users (id, name, phone, role)
+    SELECT id, 'Fulano de Tal', '+5511999999999', 'admin'
+    FROM auth.users
+    WHERE email = 'fulano@agrocotton.com';
+    ```
+    Se o usuário autenticar mas não existir em `public.users`, o app faz logout
+    automático e mostra "Usuário sem permissão".
 - **Fotos de referência reais** dos 10 itens: precisam ser levantadas em campo pelo
   implantador na primeira visita à AgroCotton.
 - **Contador de horas de lubrificação (RF-35)**: ainda não existe fonte de dados.
