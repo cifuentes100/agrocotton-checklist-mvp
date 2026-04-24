@@ -12,7 +12,7 @@ export const Route = createFileRoute("/admin")({
 
 function AdminPage() {
   return (
-    <ProtectedRoute role="admin">
+    <ProtectedRoute roles={["admin"]}>
       <DashboardShell title="Dashboard Admin" />
     </ProtectedRoute>
   );
