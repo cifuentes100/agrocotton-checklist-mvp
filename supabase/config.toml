@@ -1,1 +1,4 @@
 project_id = "ctzajxycetufjkpqhidz"
+
+[functions.seed-desfribador-b-photo]
+verify_jwt = false
