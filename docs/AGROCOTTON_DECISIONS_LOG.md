@@ -423,6 +423,73 @@ da product owner **antes** da execução — o Lovable deve perguntar.
 
 ---
 
+## ADR-015 — Catálogo gerenciável via UI (adiado para pós-MVP alfa)
+
+**Data:** 2026-04-24
+**Status:** 📋 Especificada, implementação adiada
+**Relaciona-se com:** ADR-013, ADR-014
+
+**Contexto:**
+Durante a sessão de 24/04/2026, surgiu a proposta de permitir que o implantador (e admin) editem o catálogo de itens do checklist diretamente via UI — incluindo nome, descrição, ordem, e adição/remoção de itens — em vez de exigir migration SQL para cada ajuste.
+
+A motivação é legítima: durante a implantação em uma nova fazenda, é natural descobrir ajustes necessários no catálogo a partir da realidade de campo. Forçar migration para cada ajuste cria atrito e exige presença técnica. Eventualmente, mesmo após a fase de implantação, ajustes futuros deverão ser possíveis sem reescrever migrations.
+
+**Decisão:**
+A funcionalidade está **especificada e aprovada conceitualmente**, mas sua **implementação fica adiada para pós-MVP alfa**. Razões:
+
+1. O escopo correto exige tratamento de 5 complicações: histórico semântico, soft delete (não DELETE em FK), bloqueio durante runs ativas, escopo global vs. por-máquina, e audit log obrigatório.
+2. Implementar agora atrasa o Dashboard Admin e o Bot WhatsApp em pelo menos 2 semanas. O Bot é o canal principal do operador e condição sine qua non para validar o MVP com cliente real.
+3. Ajustes pontuais durante validação em campo continuam viáveis via migration (já demonstrado 6 vezes em 24/04/2026 sem fricção significativa).
+
+**Especificação preliminar (para implementação futura):**
+
+**Modelo de estados do catálogo:**
+- `editable` — durante implantação inicial; implantador pode tudo
+- `frozen` — produção normal; ninguém edita
+- `maintenance` — implantador abre janela específica para ajustes
+
+**Permissões:**
+- Implantador: editar tudo (em estados `editable` ou `maintenance`)
+- Admin: pode iniciar/finalizar janelas de manutenção, mas não edita diretamente
+- Mecânico, operador: nenhum acesso
+
+**Operações suportadas:**
+- Editar nome e descrição (validação: não-vazio, length entre 3-100)
+- Reordenar (botões cima/baixo) — bloqueado se houver run ativa
+- Adicionar item (insere no fim do catálogo, ajusta order_idx)
+- Remover item (soft delete: flag `active=false`; nunca DELETE)
+
+**Restrições obrigatórias:**
+- Bloqueio total de edição se existir `checklist_run` com `status='in_progress'`
+- Tabela `catalog_audit_log` registrando: usuário, timestamp, operação, before/after JSON
+- Itens com `active=false` somem da UI mas permanecem no banco (preserva integridade histórica de `item_responses`)
+
+**Schema necessário (futuro):**
+```sql
+ALTER TABLE checklist_items ADD COLUMN active boolean DEFAULT true;
+
+CREATE TABLE catalog_audit_log (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id uuid REFERENCES users(id),
+  operation text NOT NULL CHECK (operation IN ('rename','reorder','add','soft_delete','restore')),
+  item_id int REFERENCES checklist_items(id),
+  before jsonb,
+  after jsonb,
+  created_at timestamptz DEFAULT now()
+);
+```
+
+**Quando implementar:**
+Após MVP alfa validado em produção com a AgroCotton. Idealmente como parte da preparação para multi-tenant (catálogos por cliente).
+
+**Consequências:**
+- ✅ ADR-013 (catálogo evolutivo via migrations) e ADR-014 (governança de schema) permanecem válidos no curto prazo
+- ✅ Foco do MVP segue em Dashboard Admin → Bot WhatsApp
+- ⚠️ Patrícia depende de sessão técnica para cada ajuste no catálogo durante a fase atual (custo aceito: ~1 sessão por ajuste, baixa frequência prevista após calibragem inicial)
+- ⚠️ Quando implementado, este ADR será marcado como `superseded` por novo ADR descrevendo a versão final entregue
+
+---
+
 ## 📝 Template para próximas decisões
 
 ```
