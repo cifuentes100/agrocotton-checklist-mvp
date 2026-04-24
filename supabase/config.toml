@@ -1,1 +1,3 @@
 project_id = "ctzajxycetufjkpqhidz"
+[functions.seed-desfb-b-v2]
+verify_jwt = false
