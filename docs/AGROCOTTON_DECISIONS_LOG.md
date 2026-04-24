@@ -235,6 +235,37 @@ DEPRECATED (mantida pra não quebrar nada).
 
 ---
 
+## ADR-010 — View `user_public_info` para proteger PII de usuários
+
+**Data:** 2026-04-24
+**Status:** ✅ Aceita e implementada
+
+**Contexto:**
+Dashboard do Mecânico precisa exibir o NOME do operador ao validar uma resposta.
+A tabela `public.users` contém também o telefone (dado sensível, LGPD). RLS é por
+linha, não por coluna — uma policy ampla de SELECT em `users` vazaria telefones
+para todos os mecânicos e admins via cliente.
+
+**Decisão:**
+Criada view `public.user_public_info(id, name, role)` com `SECURITY DEFINER`
+(`security_invoker = false`), exposta para `authenticated`/`anon`. A tabela raw
+`public.users` mantém a policy restritiva (cada um só lê o próprio registro).
+Toda query cross-role no front deve usar a view, nunca a tabela raw.
+
+**Consequências:**
+- Mecânico, admin e implantador conseguem ler nome de qualquer usuário, mas
+  nunca telefone.
+- Telefones só são acessíveis via service role (bot WhatsApp, edge functions)
+  ou pelo próprio dono do registro.
+- Joins do front passam a ser feitos contra `user_public_info`. Como views não
+  carregam FK, a relação não é inferida pelo PostgREST — usa-se um segundo
+  lookup `select id, name from user_public_info where id in (...)` indexado
+  num `Map`.
+- O linter Supabase reporta "Security Definer View" como ERROR — é
+  intencional aqui (a definição inteira do ADR depende disso).
+
+---
+
 ## 📝 Template para próximas decisões
 
 ```
