@@ -1,1 +1,4 @@
 project_id = "ctzajxycetufjkpqhidz"
+
+[functions.seed-oleo-motor-photo]
+verify_jwt = false
