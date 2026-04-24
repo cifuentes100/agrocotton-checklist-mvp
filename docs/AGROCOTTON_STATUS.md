@@ -74,7 +74,7 @@ Admin vê tudo no backlog
 ### Aplicação Web (Lovable)
 - [x] Autenticação por email/senha para mecânico/admin/implantador
 - [x] Rotas protegidas por perfil
-- [x] Dashboard Implantador — layout + lista de máquinas + configuração de 10 fotos por máquina (ADR-009)
+- [x] Dashboard Implantador — layout + lista de máquinas + cadastro de máquinas + 12 fotos de referência por máquina (ADR-009, ADR-013)
 - [x] Dashboard Mecânico — fila de validações NOK + drawer comparativo + histórico (ADR-010)
 - [ ] Dashboard Admin (backlog + dashboard + CRUD)
 
