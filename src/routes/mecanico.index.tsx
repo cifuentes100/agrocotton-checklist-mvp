@@ -41,7 +41,6 @@ interface RawRow {
     machine_id: string;
     operator_id: string;
     machines: { serial: string } | null;
-    user_public_info: { name: string } | null;
   } | null;
   checklist_items: { name: string; order_idx: number } | null;
 }
@@ -61,8 +60,7 @@ function FilaValidacoes() {
         `id, run_id, item_id, observation, photo_path, geo_lat, geo_lng, answered_at,
          checklist_runs!inner(
            machine_id, operator_id,
-           machines!inner(serial),
-           user_public_info!inner(name)
+           machines!inner(serial)
          ),
          checklist_items!inner(name, order_idx)`,
       )
@@ -77,23 +75,40 @@ function FilaValidacoes() {
       return;
     }
 
-    const mapped: PendingResponse[] = ((data ?? []) as unknown as RawRow[])
-      .filter((r) => r.checklist_runs && r.checklist_items)
-      .map((r) => ({
-        id: r.id,
-        run_id: r.run_id,
-        item_id: r.item_id,
-        observation: r.observation,
-        photo_path: r.photo_path,
-        geo_lat: r.geo_lat,
-        geo_lng: r.geo_lng,
-        answered_at: r.answered_at,
-        machine_id: r.checklist_runs!.machine_id,
-        serial: r.checklist_runs!.machines?.serial ?? "—",
-        operator_name: r.checklist_runs!.user_public_info?.name ?? "—",
-        item_name: r.checklist_items!.name,
-        order_idx: r.checklist_items!.order_idx,
-      }));
+    const raw = ((data ?? []) as unknown as RawRow[]).filter(
+      (r) => r.checklist_runs && r.checklist_items,
+    );
+
+    // Buscar nomes de operadores via view user_public_info (ADR-010)
+    const operatorIds = Array.from(
+      new Set(raw.map((r) => r.checklist_runs!.operator_id)),
+    );
+    const namesById = new Map<string, string>();
+    if (operatorIds.length > 0) {
+      const { data: users } = await supabase
+        .from("user_public_info" as never)
+        .select("id, name")
+        .in("id", operatorIds);
+      ((users ?? []) as Array<{ id: string; name: string }>).forEach((u) =>
+        namesById.set(u.id, u.name),
+      );
+    }
+
+    const mapped: PendingResponse[] = raw.map((r) => ({
+      id: r.id,
+      run_id: r.run_id,
+      item_id: r.item_id,
+      observation: r.observation,
+      photo_path: r.photo_path,
+      geo_lat: r.geo_lat,
+      geo_lng: r.geo_lng,
+      answered_at: r.answered_at,
+      machine_id: r.checklist_runs!.machine_id,
+      serial: r.checklist_runs!.machines?.serial ?? "—",
+      operator_name: namesById.get(r.checklist_runs!.operator_id) ?? "—",
+      item_name: r.checklist_items!.name,
+      order_idx: r.checklist_items!.order_idx,
+    }));
 
     setItems(mapped);
     setLoading(false);

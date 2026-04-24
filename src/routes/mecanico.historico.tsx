@@ -36,8 +36,8 @@ interface RawRow {
   validation_status: string | null;
   validation_note: string | null;
   checklist_runs: {
+    operator_id: string;
     machines: { serial: string } | null;
-    user_public_info: { name: string } | null;
   } | null;
   checklist_items: { name: string; order_idx: number } | null;
 }
@@ -55,8 +55,8 @@ function HistoricoPage() {
         .select(
           `id, validated_at, validation_status, validation_note,
            checklist_runs!inner(
-             machines!inner(serial),
-             user_public_info!inner(name)
+             operator_id,
+             machines!inner(serial)
            ),
            checklist_items!inner(name, order_idx)`,
         )
@@ -70,18 +70,35 @@ function HistoricoPage() {
         return;
       }
 
-      const mapped: HistoryRow[] = ((data ?? []) as unknown as RawRow[])
-        .filter((r) => r.checklist_runs && r.checklist_items)
-        .map((r) => ({
-          id: r.id,
-          validated_at: r.validated_at,
-          validation_status: r.validation_status,
-          validation_note: r.validation_note,
-          operator_name: r.checklist_runs!.user_public_info?.name ?? "—",
-          serial: r.checklist_runs!.machines?.serial ?? "—",
-          item_name: r.checklist_items!.name,
-          order_idx: r.checklist_items!.order_idx,
-        }));
+      const raw = ((data ?? []) as unknown as RawRow[]).filter(
+        (r) => r.checklist_runs && r.checklist_items,
+      );
+
+      // Buscar nomes via view user_public_info (ADR-010)
+      const operatorIds = Array.from(
+        new Set(raw.map((r) => r.checklist_runs!.operator_id)),
+      );
+      const namesById = new Map<string, string>();
+      if (operatorIds.length > 0) {
+        const { data: users } = await supabase
+          .from("user_public_info" as never)
+          .select("id, name")
+          .in("id", operatorIds);
+        ((users ?? []) as Array<{ id: string; name: string }>).forEach((u) =>
+          namesById.set(u.id, u.name),
+        );
+      }
+
+      const mapped: HistoryRow[] = raw.map((r) => ({
+        id: r.id,
+        validated_at: r.validated_at,
+        validation_status: r.validation_status,
+        validation_note: r.validation_note,
+        operator_name: namesById.get(r.checklist_runs!.operator_id) ?? "—",
+        serial: r.checklist_runs!.machines?.serial ?? "—",
+        item_name: r.checklist_items!.name,
+        order_idx: r.checklist_items!.order_idx,
+      }));
 
       setRows(mapped);
       setLoading(false);
