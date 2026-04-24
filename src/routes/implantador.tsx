@@ -1,16 +1,18 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Button } from "@/components/ui/button";
+import { Toaster } from "@/components/ui/sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { Wrench, Camera } from "lucide-react";
 
 export const Route = createFileRoute("/implantador")({
-  component: ImplantadorPage,
+  component: ImplantadorLayout,
   head: () => ({
-    meta: [{ title: "Dashboard Implantador — AgroCotton" }],
+    meta: [{ title: "Implantador — AgroCotton" }],
   }),
 });
 
-function ImplantadorPage() {
+function ImplantadorLayout() {
   const { signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -20,24 +22,75 @@ function ImplantadorPage() {
   };
 
   return (
-    <ProtectedRoute role="implantador">
-      <main
-        className="flex min-h-screen flex-col items-center justify-center px-6 text-center"
-        style={{ backgroundColor: "#0f172a" }}
-      >
-        <h1 className="text-3xl font-bold text-slate-100 sm:text-4xl">
-          Dashboard Implantador
-        </h1>
-        <p className="mt-3 text-sm text-slate-400">Em construção.</p>
-        <Button
-          onClick={handleSignOut}
-          variant="outline"
-          className="mt-8 border-2 bg-transparent font-semibold hover:bg-emerald-500/10"
-          style={{ borderColor: "#25D366", color: "#25D366" }}
+    <ProtectedRoute roles={["implantador", "admin"]}>
+      <div className="min-h-screen" style={{ backgroundColor: "#0f172a" }}>
+        {/* Topbar */}
+        <header
+          className="flex h-16 items-center justify-between border-b border-slate-800 px-6"
+          style={{ backgroundColor: "#0b1222" }}
         >
-          Sair
-        </Button>
-      </main>
+          <div className="flex items-center gap-2">
+            <span className="text-lg font-semibold text-slate-100">AgroCotton</span>
+            <span className="text-sm text-slate-400">— Modo Implantador</span>
+          </div>
+          <Button
+            onClick={handleSignOut}
+            variant="outline"
+            size="sm"
+            className="border-2 bg-transparent font-semibold hover:bg-violet-500/10"
+            style={{ borderColor: "#a78bfa", color: "#a78bfa" }}
+          >
+            Sair
+          </Button>
+        </header>
+
+        <div className="flex min-h-[calc(100vh-4rem)]">
+          {/* Sidebar */}
+          <aside
+            className="w-60 shrink-0 border-r border-slate-800 p-4"
+            style={{ backgroundColor: "#0b1222" }}
+          >
+            <nav className="flex flex-col gap-1">
+              <SidebarLink to="/implantador/maquinas" icon={<Wrench className="h-4 w-4" />}>
+                Máquinas
+              </SidebarLink>
+              <SidebarLink to="/implantador/maquinas" icon={<Camera className="h-4 w-4" />}>
+                Configurar Referências
+              </SidebarLink>
+            </nav>
+          </aside>
+
+          {/* Conteúdo */}
+          <main className="flex-1 overflow-auto p-6">
+            <Outlet />
+          </main>
+        </div>
+
+        <Toaster theme="dark" position="top-right" />
+      </div>
     </ProtectedRoute>
+  );
+}
+
+function SidebarLink({
+  to,
+  icon,
+  children,
+}: {
+  to: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      to={to}
+      className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-800/60"
+      activeProps={{
+        style: { backgroundColor: "rgba(167, 139, 250, 0.15)", color: "#a78bfa" },
+      }}
+    >
+      {icon}
+      <span>{children}</span>
+    </Link>
   );
 }

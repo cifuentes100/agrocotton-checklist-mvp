@@ -3,13 +3,15 @@ import { useNavigate } from "@tanstack/react-router";
 import { useAuth, homeForRole, type AppRole } from "@/contexts/AuthContext";
 
 type Props = {
-  role: AppRole;
+  roles: AppRole[];
   children: React.ReactNode;
 };
 
-export function ProtectedRoute({ role, children }: Props) {
+export function ProtectedRoute({ roles, children }: Props) {
   const { user, role: userRole, loading } = useAuth();
   const navigate = useNavigate();
+
+  const allowed = !!userRole && roles.includes(userRole);
 
   React.useEffect(() => {
     if (loading) return;
@@ -17,12 +19,12 @@ export function ProtectedRoute({ role, children }: Props) {
       navigate({ to: "/login" });
       return;
     }
-    if (userRole && userRole !== role) {
+    if (userRole && !roles.includes(userRole)) {
       navigate({ to: homeForRole(userRole) });
     }
-  }, [loading, user, userRole, role, navigate]);
+  }, [loading, user, userRole, roles, navigate]);
 
-  if (loading || !user || !userRole || userRole !== role) {
+  if (loading || !user || !allowed) {
     return (
       <div
         className="flex min-h-screen items-center justify-center"

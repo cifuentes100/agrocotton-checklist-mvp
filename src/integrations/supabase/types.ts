@@ -234,6 +234,42 @@ export type Database = {
           },
         ]
       }
+      machine_reference_photos: {
+        Row: {
+          item_id: number
+          machine_id: string
+          path: string
+          updated_at: string
+        }
+        Insert: {
+          item_id: number
+          machine_id: string
+          path: string
+          updated_at?: string
+        }
+        Update: {
+          item_id?: number
+          machine_id?: string
+          path?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "machine_reference_photos_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "checklist_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "machine_reference_photos_machine_id_fkey"
+            columns: ["machine_id"]
+            isOneToOne: false
+            referencedRelation: "machines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       machines: {
         Row: {
           created_at: string | null

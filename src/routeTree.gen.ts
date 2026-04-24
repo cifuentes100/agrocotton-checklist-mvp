@@ -14,6 +14,9 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImplantadorRouteImport } from './routes/implantador'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ImplantadorIndexRouteImport } from './routes/implantador.index'
+import { Route as ImplantadorMaquinasRouteImport } from './routes/implantador.maquinas'
+import { Route as ImplantadorReferenciasMachineIdRouteImport } from './routes/implantador.referencias.$machineId'
 
 const MecanicoRoute = MecanicoRouteImport.update({
   id: '/mecanico',
@@ -40,41 +43,89 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ImplantadorIndexRoute = ImplantadorIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ImplantadorRoute,
+} as any)
+const ImplantadorMaquinasRoute = ImplantadorMaquinasRouteImport.update({
+  id: '/maquinas',
+  path: '/maquinas',
+  getParentRoute: () => ImplantadorRoute,
+} as any)
+const ImplantadorReferenciasMachineIdRoute =
+  ImplantadorReferenciasMachineIdRouteImport.update({
+    id: '/referencias/$machineId',
+    path: '/referencias/$machineId',
+    getParentRoute: () => ImplantadorRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
-  '/implantador': typeof ImplantadorRoute
+  '/implantador': typeof ImplantadorRouteWithChildren
   '/login': typeof LoginRoute
   '/mecanico': typeof MecanicoRoute
+  '/implantador/maquinas': typeof ImplantadorMaquinasRoute
+  '/implantador/': typeof ImplantadorIndexRoute
+  '/implantador/referencias/$machineId': typeof ImplantadorReferenciasMachineIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
-  '/implantador': typeof ImplantadorRoute
   '/login': typeof LoginRoute
   '/mecanico': typeof MecanicoRoute
+  '/implantador/maquinas': typeof ImplantadorMaquinasRoute
+  '/implantador': typeof ImplantadorIndexRoute
+  '/implantador/referencias/$machineId': typeof ImplantadorReferenciasMachineIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
-  '/implantador': typeof ImplantadorRoute
+  '/implantador': typeof ImplantadorRouteWithChildren
   '/login': typeof LoginRoute
   '/mecanico': typeof MecanicoRoute
+  '/implantador/maquinas': typeof ImplantadorMaquinasRoute
+  '/implantador/': typeof ImplantadorIndexRoute
+  '/implantador/referencias/$machineId': typeof ImplantadorReferenciasMachineIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/implantador' | '/login' | '/mecanico'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/implantador'
+    | '/login'
+    | '/mecanico'
+    | '/implantador/maquinas'
+    | '/implantador/'
+    | '/implantador/referencias/$machineId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/implantador' | '/login' | '/mecanico'
-  id: '__root__' | '/' | '/admin' | '/implantador' | '/login' | '/mecanico'
+  to:
+    | '/'
+    | '/admin'
+    | '/login'
+    | '/mecanico'
+    | '/implantador/maquinas'
+    | '/implantador'
+    | '/implantador/referencias/$machineId'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/implantador'
+    | '/login'
+    | '/mecanico'
+    | '/implantador/maquinas'
+    | '/implantador/'
+    | '/implantador/referencias/$machineId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
-  ImplantadorRoute: typeof ImplantadorRoute
+  ImplantadorRoute: typeof ImplantadorRouteWithChildren
   LoginRoute: typeof LoginRoute
   MecanicoRoute: typeof MecanicoRoute
 }
@@ -116,13 +167,50 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/implantador/': {
+      id: '/implantador/'
+      path: '/'
+      fullPath: '/implantador/'
+      preLoaderRoute: typeof ImplantadorIndexRouteImport
+      parentRoute: typeof ImplantadorRoute
+    }
+    '/implantador/maquinas': {
+      id: '/implantador/maquinas'
+      path: '/maquinas'
+      fullPath: '/implantador/maquinas'
+      preLoaderRoute: typeof ImplantadorMaquinasRouteImport
+      parentRoute: typeof ImplantadorRoute
+    }
+    '/implantador/referencias/$machineId': {
+      id: '/implantador/referencias/$machineId'
+      path: '/referencias/$machineId'
+      fullPath: '/implantador/referencias/$machineId'
+      preLoaderRoute: typeof ImplantadorReferenciasMachineIdRouteImport
+      parentRoute: typeof ImplantadorRoute
+    }
   }
 }
+
+interface ImplantadorRouteChildren {
+  ImplantadorMaquinasRoute: typeof ImplantadorMaquinasRoute
+  ImplantadorIndexRoute: typeof ImplantadorIndexRoute
+  ImplantadorReferenciasMachineIdRoute: typeof ImplantadorReferenciasMachineIdRoute
+}
+
+const ImplantadorRouteChildren: ImplantadorRouteChildren = {
+  ImplantadorMaquinasRoute: ImplantadorMaquinasRoute,
+  ImplantadorIndexRoute: ImplantadorIndexRoute,
+  ImplantadorReferenciasMachineIdRoute: ImplantadorReferenciasMachineIdRoute,
+}
+
+const ImplantadorRouteWithChildren = ImplantadorRoute._addFileChildren(
+  ImplantadorRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
-  ImplantadorRoute: ImplantadorRoute,
+  ImplantadorRoute: ImplantadorRouteWithChildren,
   LoginRoute: LoginRoute,
   MecanicoRoute: MecanicoRoute,
 }
