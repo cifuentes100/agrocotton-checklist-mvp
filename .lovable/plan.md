@@ -1,146 +1,171 @@
 
+# Plano — Inserir "Cool Gard" como novo item #1 do checklist
 
-# Plano (revisado): Tela do Implantador (ADR-007 + ADR-009)
+## Mudança proposta
 
-Construir o módulo do Implantador para cadastrar colheitadeiras e configurar 10 fotos de referência **por máquina**, corrigindo o bug do schema original (`reference_correct_path` global) com uma nova tabela `machine_reference_photos`.
+A lista de 10 itens vira 11. O novo item entra no topo, e tudo que estava lá desce uma posição.
 
-## 1. Migração SQL
+### Antes → Depois
 
-### 1.1 Nova tabela `machine_reference_photos`
+| order_idx | Antes | Depois |
+|-----------|-------|--------|
+| **1** | Agua e oleo do motor | **Cool Gard (Água do motor tratada)** *(novo)* |
+| 2 | Sistema hidraulico | Agua e oleo do motor |
+| 3 | Limpeza e regulagem | Sistema hidraulico |
+| 4 | Lubrificacao Gracheiros | Limpeza e regulagem |
+| 5 | Correias RMB | Lubrificacao Gracheiros |
+| 6 | Esteira RMB | Correias RMB |
+| 7 | Correntes RMB | Esteira RMB |
+| 8 | Rolamentos RMB e cesto | Correntes RMB |
+| 9 | Calibragem de pneus | Rolamentos RMB e cesto |
+| 10 | Filtro de ar | Calibragem de pneus |
+| **11** | — | Filtro de ar |
+
+> **Importante:** o `id` de cada item NÃO muda — só o `order_idx` muda. Isso preserva todos os históricos (`item_responses` continua apontando para o `item_id` correto, sem perder nada).
+
+---
+
+## 1. Migração SQL (uma única migration)
+
+A trigger `prevent_order_idx_change` bloqueia qualquer UPDATE em `order_idx`. Vou desabilitar temporariamente, reorganizar e religar.
 
 ```sql
-create table public.machine_reference_photos (
-  machine_id uuid not null references public.machines(id) on delete cascade,
-  item_id    int  not null references public.checklist_items(id),
-  path       text not null,
-  updated_at timestamptz not null default now(),
-  primary key (machine_id, item_id)
+-- 1. Desabilita trigger de imutabilidade temporariamente
+alter table public.checklist_items disable trigger prevent_order_idx_change;
+
+-- 2. Empurra todos os itens existentes para baixo (10 → 11, 9 → 10, ..., 1 → 2)
+--    Atualiza em ordem decrescente para não quebrar a constraint UNIQUE caso exista.
+update public.checklist_items set order_idx = order_idx + 1
+where order_idx between 1 and 10;
+
+-- 3. Insere o novo item Cool Gard como #1
+insert into public.checklist_items (id, order_idx, name, description, reference_correct_path)
+values (
+  11, -- próximo id sequencial (atualmente o maior é 10)
+  1,
+  'Cool Gard (Agua do motor tratada)',
+  'Verificar nivel do Cool Gard no reservatorio do motor',
+  null
 );
 
-alter table public.machine_reference_photos enable row level security;
+-- 4. Religa a trigger
+alter table public.checklist_items enable trigger prevent_order_idx_change;
 ```
 
-### 1.2 RLS em `machine_reference_photos`
+**Observações sobre a trigger `enforce_item_order` em `item_responses`:**
+- Ela valida sequência **na hora do INSERT** comparando o `order_idx` corrente.
+- Não vai disparar nessa migration (não estamos inserindo respostas).
+- Para runs **futuras** das 2 máquinas afetadas, o operador vai precisar começar pelo novo #1 (Cool Gard). Isso já é o comportamento esperado do app.
+- Para runs **antigas** (já completas), nada quebra — a leitura junta `item_id` direto, sem revalidar ordem.
 
-- **SELECT**: todos autenticados (`auth.uid() is not null`).
-- **INSERT/UPDATE/DELETE**: implantador e admin (`current_role() in ('implantador','admin')`).
+---
 
-### 1.3 Depreciação da coluna antiga
+## 2. Foto de referência — propagar para as 2 máquinas existentes
+
+A imagem que você enviou (Cool Gard + colheitadeira com marcação "verificar nível") será:
+
+1. Copiada para `src/assets/cool-gard-referencia.jpg` (workspace do projeto).
+2. Lida pela migration via um script Node auxiliar **OU** subida manualmente por upload no bucket `reference-photos` em dois caminhos:
+   - `5a61c9fb-52ea-4c2a-8b86-8a63c48811e7/11.jpg`
+   - `711ed80e-95f4-4618-a1bc-6c202eb4e37d/11.jpg`
+3. Após o upload, INSERTs em `machine_reference_photos`:
 
 ```sql
-comment on column public.checklist_items.reference_correct_path
-  is 'DEPRECATED - use machine_reference_photos';
+insert into public.machine_reference_photos (machine_id, item_id, path, updated_at)
+values
+  ('5a61c9fb-52ea-4c2a-8b86-8a63c48811e7', 11, '5a61c9fb-52ea-4c2a-8b86-8a63c48811e7/11.jpg', now()),
+  ('711ed80e-95f4-4618-a1bc-6c202eb4e37d', 11, '711ed80e-95f4-4618-a1bc-6c202eb4e37d/11.jpg', now())
+on conflict (machine_id, item_id) do update
+  set path = excluded.path, updated_at = excluded.updated_at;
 ```
 
-Coluna mantida (não removida) para não quebrar nada existente. Nenhuma leitura ou escrita nova vai usá-la.
+**Como vou subir a foto para o Storage:** vou rodar um script Node usando a service_role_key (no sandbox) que lê `src/assets/cool-gard-referencia.jpg` e faz upload nos dois caminhos via API do Storage. Já tenho `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` disponíveis no ambiente.
 
-### 1.4 Policies que ainda faltam
+> Nota: a imagem que você enviou é uma colagem didática (embalagem do Cool Gard + foto de uma colheitadeira John Deere genérica). Ela serve como referência visual inicial. O implantador pode substituir por uma foto real específica de cada máquina depois — o botão "Substituir foto" na tela de referências já permite isso.
 
-- **`machines` UPDATE**: implantador/admin podem mudar status (`current_role() in ('implantador','admin')`).
-- **`checklist_items` SELECT**: todos autenticados podem listar os 10 itens (sem essa policy a tela quebra). UPDATE não é mais necessário (não vamos escrever nessa tabela).
+---
 
-### 1.5 Storage policies — bucket `reference-photos`
+## 3. Status das máquinas
 
-- **INSERT/UPDATE/DELETE em `storage.objects`**: implantador/admin no bucket `reference-photos`.
-- **SELECT em `storage.objects`**: implantador/admin/mecanico no bucket `reference-photos` (operador continua acessando via signed URL gerada pelo bot).
+Conforme você decidiu: **mantém o status atual** (`ready`) das 2 máquinas. A propagação automática da foto vai garantir que elas tenham as 11 fotos completas após a migration, então o status `ready` continua válido sem nenhum aviso necessário.
 
-## 2. Estrutura de rotas
+---
 
-```text
-src/routes/
-├── implantador.tsx                          (layout: topbar + sidebar + Outlet)
-├── implantador.index.tsx                    (redirect → /implantador/maquinas)
-├── implantador.maquinas.tsx                 (lista + criar máquina)
-└── implantador.referencias.$machineId.tsx   (configurar 10 fotos por máquina)
+## 4. Documentação (ADRs e STATUS)
+
+### `docs/AGROCOTTON_DECISIONS_LOG.md` — adicionar **ADR-013** ao final
+
+```markdown
+## ADR-013 — Inclusão do item "Cool Gard" como #1 do checklist
+
+**Data:** 2026-04-24
+**Status:** Aceito
+
+### Contexto
+A verificação de nível do Cool Gard (líquido de arrefecimento tratado do motor) é uma rotina crítica omitida na lista original de 10 itens. Detectada na revisão com Fernando/Márcio.
+
+### Decisão
+- Cool Gard entra como item **#1** do checklist (ordem `order_idx = 1`).
+- Os 10 itens originais descem uma posição cada (#1→#2 ... #10→#11).
+- IDs originais são preservados — só o `order_idx` muda.
+- A trigger `prevent_order_idx_change` é temporariamente desabilitada apenas durante a migration.
+- Foto de referência inicial é propagada para todas as máquinas já cadastradas (atualmente 2). O implantador pode substituir depois.
+
+### Consequências
+- O checklist agora tem 11 etapas, não 10. Toda a UI e textos que mencionam "10 itens" devem ser atualizados.
+- Históricos (`item_responses`) ficam intactos porque referenciam `item_id`, não `order_idx`.
+- Próximo run de cada máquina deve começar pelo novo #1 (Cool Gard) — comportamento já garantido pela trigger `enforce_item_order`.
 ```
 
-`<ProtectedRoute roles={['implantador','admin']}>` envolve só o layout.
+### `docs/AGROCOTTON_STATUS.md` — atualizar
 
-## 3. `ProtectedRoute` — múltiplos roles
+- "Última atualização": **2026-04-24**.
+- Adicionar **ADR-013** na lista de decisões.
+- Em qualquer menção a "10 itens" / "10 etapas" do checklist, trocar para **"11 itens"**.
+- Preservar todo o resto do conteúdo (não apagar nada).
 
-Trocar prop `role: AppRole` por `roles: AppRole[]`. Atualizar callers em `admin.tsx`, `mecanico.tsx`, `implantador.tsx`. Admin passa a poder supervisionar `/implantador/*`.
+---
 
-## 4. Layout do Implantador
+## 5. Atualização da UI (textos hardcoded)
 
-- Fundo `#0f172a`, acento roxo `#a78bfa`.
-- **Topbar**: "AgroCotton — Modo Implantador" + botão "Sair".
-- **Sidebar fixa** com 2 links (`<Link>` do TanStack, estado ativo destacado):
-  - "Máquinas" → `/implantador/maquinas`
-  - "Configurar Referências" → `/implantador/maquinas` (a configuração é acessada clicando em uma máquina da lista)
-- `<Outlet/>` para a página filha.
-- `<Toaster/>` (sonner) para feedback.
+Procurar por strings que mencionam "10" no contexto do checklist e ajustar:
 
-## 5. Página `/implantador/maquinas`
+- `src/routes/implantador.referencias.$machineId.tsx`:
+  - Cabeçalho "X de 10 itens configurados" — já é dinâmico (`totalItems`), nada a mudar.
+  - Botão "Finalizar configuração" aparece quando `configuredCount === totalItems` — já dinâmico.
+- `.lovable/plan.md` e outros docs internos: atualizar menções a "10 itens" para "11 itens" onde aparecer (apenas nos arquivos vivos: `docs/`).
+- Se o Dashboard Mecânico tiver alguma referência fixa ao número 10, ajustar.
 
-- `SELECT * FROM machines ORDER BY created_at DESC`.
-- Tabela shadcn: Serial | Modelo | Ano | Local | Status | Ações.
-- **Badge de status**: `pending`=cinza, `setup`=amarelo, `ready`=verde, `maintenance`=vermelho.
-- Ação "Configurar fotos" → navega para `/implantador/referencias/$machineId`.
-- Botão **"Nova máquina"** abre `Dialog` com formulário (`react-hook-form` + `zod`):
-  - Serial (string, obrigatório, único)
-  - Modelo (string, obrigatório)
-  - Ano (number, opcional)
-  - Localização (string, opcional)
-- INSERT em `machines` com `status='pending'`. Erro de duplicidade de serial → mensagem PT.
-- Após sucesso: toast + redirect para `/implantador/referencias/{novo_id}`.
+Vou rodar `rg "10 itens|10 etapas|10 fotos"` antes de editar para mapear todos os pontos.
 
-## 6. Página `/implantador/referencias/$machineId` (ADR-009)
+---
 
-- Buscar máquina (`SELECT * FROM machines WHERE id = $machineId`); se não existir → estado vazio com link de volta.
-- Buscar `SELECT * FROM checklist_items ORDER BY order_idx` (10 itens).
-- Buscar `SELECT item_id, path, updated_at FROM machine_reference_photos WHERE machine_id = $machineId` → indexar por `item_id`.
-- **Cabeçalho**: "Configurar referências — {serial}".
-- **Barra de progresso**: "X de 10 itens configurados" (X = linhas em `machine_reference_photos` para essa máquina). `Progress` shadcn em roxo.
-- **Lista de 10 cards** (ordem `order_idx`):
-  - Número + nome + descrição.
-  - Se foto existe: thumbnail (signed URL 1h) + "Substituir foto".
-  - Se não: botão **"Adicionar foto do padrão correto"**.
-  - Input escondido: `<input type="file" accept="image/jpeg,image/png,image/heic" capture="environment">`. Sem opção de galeria. Sem nenhuma menção a "padrão incorreto" (RF-13).
-- **Fluxo de upload**:
-  1. `supabase.storage.from('reference-photos').upload('{machineId}/{itemId}.jpg', file, { upsert: true })`.
-  2. **UPSERT** em `machine_reference_photos` (machine_id, item_id, path, updated_at = now()) com `onConflict: 'machine_id,item_id'`.
-  3. Recarregar fotos da máquina + recalcular progresso + atualizar thumbnail.
-  4. Toast PT.
-- **Botão "Finalizar configuração"**: aparece quando `count(machine_reference_photos WHERE machine_id = $machineId) = 10`. Ao clicar: `UPDATE machines SET status='ready' WHERE id = $machineId` → toast + voltar para `/implantador/maquinas`.
+## Detalhes técnicos
 
-## 7. Atualização de docs
+**Arquivos a criar:**
+- `supabase/migrations/{timestamp}_inserir_cool_gard_item_1.sql`
+- `src/assets/cool-gard-referencia.jpg` (cópia de `user-uploads://nivel_cool-gard.jpg`)
 
-- **`docs/AGROCOTTON_DECISIONS_LOG.md`**: adicionar **ADR-009 — Fotos de referência são por máquina, não globais** com o conteúdo exato fornecido pelo usuário.
-- **`docs/AGROCOTTON_STATUS.md`**: anotar ADR-009 como decisão tomada na seção apropriada.
+**Arquivos a editar:**
+- `docs/AGROCOTTON_DECISIONS_LOG.md` (append ADR-013)
+- `docs/AGROCOTTON_STATUS.md` (data + ADR + número de itens)
+- Qualquer arquivo encontrado por `rg` com referência fixa a "10 itens" no contexto do checklist
 
-## 8. Detalhes técnicos
+**Operações fora da migration (executadas via script Node no sandbox):**
+1. Upload de `src/assets/cool-gard-referencia.jpg` para `reference-photos/5a61c9fb-52ea-4c2a-8b86-8a63c48811e7/11.jpg`
+2. Upload da mesma foto para `reference-photos/711ed80e-95f4-4618-a1bc-6c202eb4e37d/11.jpg`
+3. Os INSERTs em `machine_reference_photos` ficam **dentro** da migration (após a foto estar no bucket).
 
-- Data fetching: `useEffect` + `useState` (consistente com o resto do app).
-- Signed URLs: `createSignedUrl(path, 3600)`, armazenadas em `Map<itemId, url>`.
-- Form: `zod` + `react-hook-form` (já instalados).
-- Toasts: `sonner` (já no projeto).
-- Tema: fundo `#0f172a`, cards `bg-slate-900/60 border-slate-800`, acento `#a78bfa` (botões primários, sidebar ativa, progresso, borda do botão Sair).
-- Strings em PT-BR em toda a UI.
+**Ordem de execução:**
+1. Copiar foto para `src/assets/`.
+2. Rodar script Node para upload no Storage (2 caminhos).
+3. Aplicar migration SQL (reorganiza `order_idx` + insere novo item + INSERTs em `machine_reference_photos`).
+4. Atualizar docs.
+5. Rodar `rg` e ajustar menções a "10 itens" se houver.
 
-## 9. Arquivos a criar/editar
-
-**Criar:**
-- `src/routes/implantador.index.tsx`
-- `src/routes/implantador.maquinas.tsx`
-- `src/routes/implantador.referencias.$machineId.tsx`
-- `src/components/implantador/MachineFormDialog.tsx`
-- `src/components/implantador/ReferenceItemCard.tsx`
-- `src/components/implantador/StatusBadge.tsx`
-
-**Editar:**
-- `src/routes/implantador.tsx` → vira layout protegido por `roles=['implantador','admin']`.
-- `src/components/ProtectedRoute.tsx` → `roles: AppRole[]`.
-- `src/routes/admin.tsx`, `src/routes/mecanico.tsx` → atualizar prop.
-- `docs/AGROCOTTON_DECISIONS_LOG.md` → ADR-009.
-- `docs/AGROCOTTON_STATUS.md` → registrar ADR-009.
-
-**Não tocar:** `src/integrations/supabase/types.ts`, `src/routeTree.gen.ts`.
-
-## 10. Fora do escopo
-
-- Histórico de substituição de fotos.
-- Pausar/retomar com localStorage.
-- Edição avançada de specs JSONB.
-- Telas Mecânico / Admin / Bot WhatsApp.
-- Remoção física da coluna `reference_correct_path` (fica deprecated, sem uso).
+**Fora do escopo:**
+- Renumerar `id` dos itens (preservados intactos).
+- Mudar status das máquinas existentes.
+- Editar UI dinâmica que já lê `totalItems` da query.
+- Tela do Admin / Bot WhatsApp.
 
