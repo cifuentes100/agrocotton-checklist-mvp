@@ -95,21 +95,12 @@ Admin vê tudo no backlog
 
 ## 🗺️ Próximos passos imediatos
 
-1. **Construir tela do Implantador** (ADR-007)
-   - É o primeiro usuário real do sistema
-   - Sem ele, não há máquinas cadastradas nem fotos de referência
-   - Sem isso, operador não tem o que inspecionar
-
-2. **Construir tela do Mecânico**
-   - Fila Realtime de fotos NOK
-   - Validação (aprovar/reprovar + diagnóstico)
-
-3. **Construir Admin** (backlog + dashboard)
-   - Backlog + dashboard + CRUD
-
-4. **Construir Bot WhatsApp** (fora do Lovable, em Edge Function)
-   - Decidir provider antes
-   - Espelhar invariantes do SDD (RF-31, RF-03, RF-13, RF-36)
+1. ~~Calibragem do catálogo de checklist (12 itens validados)~~ ✅ 24/04/2026
+2. ~~Reset de dados de teste semanticamente quebrados~~ ✅ 24/04/2026
+3. Catalogar 8 warnings do linter Supabase (ADR-011 futuro)
+4. Construir Dashboard Admin (adaptado aos 12 itens do catálogo atual)
+5. Decidir ADR-003 (provider WhatsApp)
+6. Construir Bot WhatsApp
 
 ---
 
