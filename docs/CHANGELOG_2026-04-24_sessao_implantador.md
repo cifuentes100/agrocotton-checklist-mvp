@@ -1,12 +1,3 @@
-## Objetivo
-
-Criar **um único arquivo** novo, sem mexer em mais nada:
-
-- `docs/CHANGELOG_2026-04-24_sessao_implantador.md`
-
-## Conteúdo do arquivo
-
-```markdown
 # Changelog — Sessão 2026-04-24
 
 ## Contexto da sessão
@@ -16,13 +7,12 @@ A Patrícia pediu uma série de ajustes no checklist da colheitadeira (renomear,
 ## TODOS os arquivos alterados ou criados nesta sessão
 
 ### Migrations SQL (todas criadas)
-- `supabase/migrations/20260424175652_*.sql` — criado — insere "Cool Gard" como item #1 e empurra os demais (1→2 ... 10→11)
-- `supabase/migrations/20260424182710_*.sql` — criado — renomeia item id=1 para "Oleo do motor" + nova descrição
-- `supabase/migrations/20260424190133_*.sql` — criado — renomeia item id=3 para "Limpeza e regulagem desfribador A" e troca order_idx de id=2 e id=3 (3↔4)
-- `supabase/migrations/20260424191814_*.sql` — criado — insere item id=12 "Limpeza e regulagem desfribador B" no slot order_idx=4 e empurra 4..11 para 5..12
-- `supabase/migrations/20260424194624_*.sql` — criado — renomeia item id=2 para "Gracheiro Mancal" / "Verificar pontos destacados"
-- `supabase/migrations/20260424200054_*.sql` — criado — renomeia item id=4 para "Gracheiro terceiro ponto" / "Verificar lubrificação"
-- `supabase/migrations/20260424002323_*.sql` e `20260424023109_*.sql` — pré-existentes nesta sessão (não tocados agora; listados para clareza, são da sessão anterior)
+- `supabase/migrations/20260424175652_0db0f88e-e31c-45e4-ba75-6f915855197e.sql` — criado — insere "Cool Gard" como item #1 e empurra os demais (1→2 ... 10→11)
+- `supabase/migrations/20260424182710_3ff267af-7dcb-4c62-b920-90bb81bea38d.sql` — criado — renomeia item id=1 para "Oleo do motor" + nova descrição
+- `supabase/migrations/20260424190133_b4a700f2-18f9-4eba-9f04-dfac589841f1.sql` — criado — renomeia item id=3 para "Limpeza e regulagem desfribador A" e troca order_idx de id=2 e id=3 (3↔4)
+- `supabase/migrations/20260424191814_c9ff1abc-2383-4613-b888-b80d2b59bfe8.sql` — criado — insere item id=12 "Limpeza e regulagem desfribador B" no slot order_idx=4 e empurra 4..11 para 5..12
+- `supabase/migrations/20260424194624_2b606c44-c193-4594-b4ec-36696ca7978d.sql` — criado — renomeia item id=2 para "Gracheiro Mancal" / "Verificar pontos destacados"
+- `supabase/migrations/20260424200054_9bc29945-eed0-4304-bca0-cd78ff60e054.sql` — criado — renomeia item id=4 para "Gracheiro terceiro ponto" / "Verificar lubrificação"
 
 ### Assets de imagem (todos criados)
 - `src/assets/cool-gard-referencia.jpg` — criado — foto de referência do item #1 (Cool Gard)
@@ -184,9 +174,3 @@ Nenhuma. Todas as mudanças foram diretamente solicitadas pela Patrícia (renome
 - **Ordem dos itens hoje (12 itens):** order_idx 1..12 com ids respectivos: 11, 1, 3, 12, 2, 4, 5, 6, 7, 8, 9, 10. Útil para qualquer query/relatório futuro.
 - **Trigger `trg_checklist_items_immutable`:** continua ativo no banco. Qualquer nova alteração de `order_idx` exigirá o mesmo padrão de DISABLE/ENABLE em migration.
 - **Nenhum erro conhecido** em console nem warning pendente nesta sessão.
-```
-
-## Confirmação de escopo
-
-- Único arquivo criado: `docs/CHANGELOG_2026-04-24_sessao_implantador.md`
-- Nenhum outro arquivo modificado, nenhum schema/migration novo, nenhuma function nova, nenhuma dependência adicionada.
