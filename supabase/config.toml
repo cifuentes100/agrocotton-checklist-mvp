@@ -1,1 +1,4 @@
 project_id = "ctzajxycetufjkpqhidz"
+
+[functions.seed-gracheiro-terceiro-photo]
+verify_jwt = false
