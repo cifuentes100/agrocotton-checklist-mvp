@@ -30,25 +30,22 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceKey);
 
     const bytes = base64ToBytes(IMAGE_BASE64);
-    const blob = new Blob([bytes], { type: "image/jpeg" });
+    const arrayBuf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    const blob = new Blob([arrayBuf], { type: "image/jpeg" });
 
-    // Buscar todas as máquinas existentes
-    const { data: machines, error: mErr } = await supabase
-      .from("machines")
-      .select("id");
+    const { data: machines, error: mErr } = await supabase.from("machines").select("id");
     if (mErr) throw mErr;
 
-    // Buscar o id do item Cool Gard (order_idx = 1 após a migration)
-    const { data: items, error: iErr } = await supabase
+    const { data: item, error: iErr } = await supabase
       .from("checklist_items")
-      .select("id, order_idx, name")
+      .select("id, name")
       .eq("order_idx", 1)
       .maybeSingle();
     if (iErr) throw iErr;
-    if (!items) throw new Error("Item com order_idx=1 não encontrado. Rode a migration primeiro.");
+    if (!item) throw new Error("Item com order_idx=1 nao encontrado. Rode a migration primeiro.");
 
-    const itemId = items.id;
-    const results: Array<{ machine: string; upload: number; db: string }> = [];
+    const itemId = item.id;
+    const results: Array<{ machine: string; upload: string; db: string }> = [];
 
     for (const m of machines ?? []) {
       const path = `${m.id}/${itemId}.jpg`;
@@ -66,13 +63,13 @@ Deno.serve(async (req) => {
 
       results.push({
         machine: m.id,
-        upload: upErr ? 1 : 0,
-        db: dbErr ? `db_err: ${dbErr.message}` : "ok",
+        upload: upErr ? `err: ${upErr.message}` : "ok",
+        db: dbErr ? `err: ${dbErr.message}` : "ok",
       });
     }
 
     return new Response(
-      JSON.stringify({ ok: true, item_id: itemId, item_name: items.name, results }, null, 2),
+      JSON.stringify({ ok: true, item_id: itemId, item_name: item.name, results }, null, 2),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
