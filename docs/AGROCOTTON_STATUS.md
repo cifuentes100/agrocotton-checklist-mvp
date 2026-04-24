@@ -4,8 +4,8 @@
 > fonte de verdade sobre onde estamos. Decisões arquiteturais ficam em
 > `AGROCOTTON_DECISIONS_LOG.md`.
 
-**Última atualização:** 2026-04-23
-**Fase atual:** Construção — Autenticação do web app
+**Última atualização:** 2026-04-24
+**Fase atual:** Construção — Dashboard Implantador
 **Próximo marco:** Login email/senha funcionando para 3 perfis técnicos
 
 ---
