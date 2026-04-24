@@ -212,6 +212,29 @@ em public.users quando `auth.uid() = id`.
 
 ---
 
+## ADR-009 — Fotos de referência são por máquina, não globais
+
+**Data:** 2026-04-23
+**Status:** ✅ Aceita e implementada
+
+**Contexto:**
+O schema original tinha `checklist_items.reference_correct_path` como coluna global.
+Isso significava que a foto de referência era compartilhada entre todas as máquinas.
+Bug identificado pelo Lovable durante o planejamento da tela do Implantador.
+
+**Decisão:**
+Nova tabela `machine_reference_photos(machine_id, item_id, path)` com PK composta.
+Cada máquina tem suas próprias 10 fotos de referência. Coluna antiga marcada como
+DEPRECATED (mantida pra não quebrar nada).
+
+**Consequências:**
+- Suporta RF-34 (variações técnicas por máquina)
+- Máquinas diferentes podem ter padrões de referência diferentes
+- Bot WhatsApp precisa consultar essa tabela pela combinação (machine_id, item_id)
+- Implantador configura as 10 fotos específicas para cada máquina nova
+
+---
+
 ## 📝 Template para próximas decisões
 
 ```
