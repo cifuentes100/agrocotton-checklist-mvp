@@ -75,6 +75,13 @@ export type Database = {
             foreignKeyName: "checklist_runs_operator_id_fkey"
             columns: ["operator_id"]
             isOneToOne: false
+            referencedRelation: "user_public_info"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checklist_runs_operator_id_fkey"
+            columns: ["operator_id"]
+            isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
           },
@@ -113,6 +120,13 @@ export type Database = {
             foreignKeyName: "communications_from_user_fkey"
             columns: ["from_user"]
             isOneToOne: false
+            referencedRelation: "user_public_info"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communications_from_user_fkey"
+            columns: ["from_user"]
+            isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
           },
@@ -121,6 +135,13 @@ export type Database = {
             columns: ["run_id"]
             isOneToOne: false
             referencedRelation: "checklist_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communications_to_user_fkey"
+            columns: ["to_user"]
+            isOneToOne: false
+            referencedRelation: "user_public_info"
             referencedColumns: ["id"]
           },
           {
@@ -191,6 +212,13 @@ export type Database = {
             columns: ["run_id"]
             isOneToOne: false
             referencedRelation: "checklist_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "item_responses_validated_by_fkey"
+            columns: ["validated_by"]
+            isOneToOne: false
+            referencedRelation: "user_public_info"
             referencedColumns: ["id"]
           },
           {
@@ -364,7 +392,24 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      user_public_info: {
+        Row: {
+          id: string | null
+          name: string | null
+          role: string | null
+        }
+        Insert: {
+          id?: string | null
+          name?: string | null
+          role?: string | null
+        }
+        Update: {
+          id?: string | null
+          name?: string | null
+          role?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       current_role: { Args: never; Returns: string }

@@ -14,7 +14,9 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImplantadorRouteImport } from './routes/implantador'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as MecanicoIndexRouteImport } from './routes/mecanico.index'
 import { Route as ImplantadorIndexRouteImport } from './routes/implantador.index'
+import { Route as MecanicoHistoricoRouteImport } from './routes/mecanico.historico'
 import { Route as ImplantadorMaquinasRouteImport } from './routes/implantador.maquinas'
 import { Route as ImplantadorReferenciasMachineIdRouteImport } from './routes/implantador.referencias.$machineId'
 
@@ -43,10 +45,20 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MecanicoIndexRoute = MecanicoIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => MecanicoRoute,
+} as any)
 const ImplantadorIndexRoute = ImplantadorIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => ImplantadorRoute,
+} as any)
+const MecanicoHistoricoRoute = MecanicoHistoricoRouteImport.update({
+  id: '/historico',
+  path: '/historico',
+  getParentRoute: () => MecanicoRoute,
 } as any)
 const ImplantadorMaquinasRoute = ImplantadorMaquinasRouteImport.update({
   id: '/maquinas',
@@ -65,18 +77,21 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRoute
   '/implantador': typeof ImplantadorRouteWithChildren
   '/login': typeof LoginRoute
-  '/mecanico': typeof MecanicoRoute
+  '/mecanico': typeof MecanicoRouteWithChildren
   '/implantador/maquinas': typeof ImplantadorMaquinasRoute
+  '/mecanico/historico': typeof MecanicoHistoricoRoute
   '/implantador/': typeof ImplantadorIndexRoute
+  '/mecanico/': typeof MecanicoIndexRoute
   '/implantador/referencias/$machineId': typeof ImplantadorReferenciasMachineIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/login': typeof LoginRoute
-  '/mecanico': typeof MecanicoRoute
   '/implantador/maquinas': typeof ImplantadorMaquinasRoute
+  '/mecanico/historico': typeof MecanicoHistoricoRoute
   '/implantador': typeof ImplantadorIndexRoute
+  '/mecanico': typeof MecanicoIndexRoute
   '/implantador/referencias/$machineId': typeof ImplantadorReferenciasMachineIdRoute
 }
 export interface FileRoutesById {
@@ -85,9 +100,11 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/implantador': typeof ImplantadorRouteWithChildren
   '/login': typeof LoginRoute
-  '/mecanico': typeof MecanicoRoute
+  '/mecanico': typeof MecanicoRouteWithChildren
   '/implantador/maquinas': typeof ImplantadorMaquinasRoute
+  '/mecanico/historico': typeof MecanicoHistoricoRoute
   '/implantador/': typeof ImplantadorIndexRoute
+  '/mecanico/': typeof MecanicoIndexRoute
   '/implantador/referencias/$machineId': typeof ImplantadorReferenciasMachineIdRoute
 }
 export interface FileRouteTypes {
@@ -99,16 +116,19 @@ export interface FileRouteTypes {
     | '/login'
     | '/mecanico'
     | '/implantador/maquinas'
+    | '/mecanico/historico'
     | '/implantador/'
+    | '/mecanico/'
     | '/implantador/referencias/$machineId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/admin'
     | '/login'
-    | '/mecanico'
     | '/implantador/maquinas'
+    | '/mecanico/historico'
     | '/implantador'
+    | '/mecanico'
     | '/implantador/referencias/$machineId'
   id:
     | '__root__'
@@ -118,7 +138,9 @@ export interface FileRouteTypes {
     | '/login'
     | '/mecanico'
     | '/implantador/maquinas'
+    | '/mecanico/historico'
     | '/implantador/'
+    | '/mecanico/'
     | '/implantador/referencias/$machineId'
   fileRoutesById: FileRoutesById
 }
@@ -127,7 +149,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   ImplantadorRoute: typeof ImplantadorRouteWithChildren
   LoginRoute: typeof LoginRoute
-  MecanicoRoute: typeof MecanicoRoute
+  MecanicoRoute: typeof MecanicoRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -167,12 +189,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mecanico/': {
+      id: '/mecanico/'
+      path: '/'
+      fullPath: '/mecanico/'
+      preLoaderRoute: typeof MecanicoIndexRouteImport
+      parentRoute: typeof MecanicoRoute
+    }
     '/implantador/': {
       id: '/implantador/'
       path: '/'
       fullPath: '/implantador/'
       preLoaderRoute: typeof ImplantadorIndexRouteImport
       parentRoute: typeof ImplantadorRoute
+    }
+    '/mecanico/historico': {
+      id: '/mecanico/historico'
+      path: '/historico'
+      fullPath: '/mecanico/historico'
+      preLoaderRoute: typeof MecanicoHistoricoRouteImport
+      parentRoute: typeof MecanicoRoute
     }
     '/implantador/maquinas': {
       id: '/implantador/maquinas'
@@ -207,12 +243,26 @@ const ImplantadorRouteWithChildren = ImplantadorRoute._addFileChildren(
   ImplantadorRouteChildren,
 )
 
+interface MecanicoRouteChildren {
+  MecanicoHistoricoRoute: typeof MecanicoHistoricoRoute
+  MecanicoIndexRoute: typeof MecanicoIndexRoute
+}
+
+const MecanicoRouteChildren: MecanicoRouteChildren = {
+  MecanicoHistoricoRoute: MecanicoHistoricoRoute,
+  MecanicoIndexRoute: MecanicoIndexRoute,
+}
+
+const MecanicoRouteWithChildren = MecanicoRoute._addFileChildren(
+  MecanicoRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   ImplantadorRoute: ImplantadorRouteWithChildren,
   LoginRoute: LoginRoute,
-  MecanicoRoute: MecanicoRoute,
+  MecanicoRoute: MecanicoRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

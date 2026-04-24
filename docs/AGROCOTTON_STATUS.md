@@ -5,8 +5,8 @@
 > `AGROCOTTON_DECISIONS_LOG.md`.
 
 **Última atualização:** 2026-04-24
-**Fase atual:** Construção — Dashboard Implantador
-**Próximo marco:** Implantador consegue cadastrar máquina e configurar 10 fotos de referência
+**Fase atual:** Construção — Dashboard Admin
+**Próximo marco:** Admin com backlog + dashboard + CRUD
 
 ---
 
@@ -71,7 +71,7 @@ Admin vê tudo no backlog
 - [x] Autenticação por email/senha para mecânico/admin/implantador
 - [x] Rotas protegidas por perfil
 - [x] Dashboard Implantador — layout + lista de máquinas + configuração de 10 fotos por máquina (ADR-009)
-- [ ] Dashboard Mecânico (validação de fotos NOK em tempo real)
+- [x] Dashboard Mecânico — fila de validações NOK + drawer comparativo + histórico (ADR-010)
 - [ ] Dashboard Admin (backlog + dashboard + CRUD)
 
 ### Bot WhatsApp (fora do Lovable)
