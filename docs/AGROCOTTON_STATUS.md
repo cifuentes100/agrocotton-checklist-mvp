@@ -4,8 +4,8 @@
 > fonte de verdade sobre onde estamos. Decisões arquiteturais ficam em
 > `AGROCOTTON_DECISIONS_LOG.md`.
 
-**Última atualização:** 2026-04-23
-**Fase atual:** Construção — Autenticação do web app
+**Última atualização:** 2026-04-24
+**Fase atual:** Construção — Dashboard Implantador
 **Próximo marco:** Login email/senha funcionando para 3 perfis técnicos
 
 ---
@@ -91,24 +91,19 @@ Admin vê tudo no backlog
 
 ## 🗺️ Próximos passos imediatos
 
-1. **Configurar autenticação email/senha no Lovable** (Supabase Auth)
-   - Tela de login `/login`
-   - Cadastro de primeiros usuários (via SQL no Supabase, manual)
-   - `ProtectedRoute` por perfil (mecânico/admin/implantador)
-
-2. **Construir tela do Implantador primeiro**
+1. **Construir tela do Implantador** (ADR-007)
    - É o primeiro usuário real do sistema
    - Sem ele, não há máquinas cadastradas nem fotos de referência
    - Sem isso, operador não tem o que inspecionar
 
-3. **Construir tela do Mecânico**
+2. **Construir tela do Mecânico**
    - Fila Realtime de fotos NOK
    - Validação (aprovar/reprovar + diagnóstico)
 
-4. **Construir Admin**
+3. **Construir Admin** (backlog + dashboard)
    - Backlog + dashboard + CRUD
 
-5. **Construir Bot WhatsApp** (fora do Lovable, em Edge Function)
+4. **Construir Bot WhatsApp** (fora do Lovable, em Edge Function)
    - Decidir provider antes
    - Espelhar invariantes do SDD (RF-31, RF-03, RF-13, RF-36)
 

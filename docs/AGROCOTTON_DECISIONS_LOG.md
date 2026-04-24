@@ -190,6 +190,28 @@ Ordem de construção no Lovable:
 
 ---
 
+## ADR-008 — RLS: usuários autenticados leem o próprio registro em public.users
+
+**Data:** 2026-04-23
+**Status:** ✅ Aceita e implementada
+
+**Contexto:**
+Durante o primeiro teste de login, o AuthContext recebia "Usuário sem permissão"
+mesmo com o usuário existindo em `auth.users` E em `public.users` com IDs batendo.
+Causa: RLS estava habilitada em `public.users` mas não havia policy permitindo o
+SELECT do próprio registro pelo usuário autenticado.
+
+**Decisão:**
+Criada policy `usuarios autenticados leem seu proprio registro` que permite SELECT
+em public.users quando `auth.uid() = id`.
+
+**Consequências:**
+- Cada usuário lê apenas o próprio cadastro (exceto admins, que podem precisar de
+  policy adicional no futuro para listar todos os usuários no painel admin)
+- Esperar policies adicionais em CRUD de usuários do admin (a criar depois)
+
+---
+
 ## 📝 Template para próximas decisões
 
 ```
