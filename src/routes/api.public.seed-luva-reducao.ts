@@ -1,7 +1,11 @@
+import * as React from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
-// Importa o asset como URL servida pelo Vite/Worker
+import { supabase } from "@/integrations/supabase/client";
 import luvaReducaoUrl from "@/assets/luva-reducao-referencia.jpg?url";
+
+export const Route = createFileRoute("/api/public/seed-luva-reducao")({
+  component: SeedLuvaPage,
+});
 
 const ITEM_ID = 5;
 const MACHINES = [
@@ -9,61 +13,64 @@ const MACHINES = [
   { id: "711ed80e-95f4-4618-a1bc-6c202eb4e37d", serial: "AGR-2026-002" },
 ];
 
-export const Route = createFileRoute("/api/public/seed-luva-reducao")({
-  server: {
-    handlers: {
-      POST: async ({ request }) => {
-        try {
-          const url = new URL(request.url);
-          const assetUrl = new URL(luvaReducaoUrl, url.origin).toString();
-          const assetRes = await fetch(assetUrl);
-          if (!assetRes.ok) {
-            return Response.json(
-              { error: `Falha ao buscar asset (${assetRes.status}) em ${assetUrl}` },
-              { status: 500 },
-            );
-          }
-          const buffer = new Uint8Array(await assetRes.arrayBuffer());
+function SeedLuvaPage() {
+  const [log, setLog] = React.useState<string[]>(["aguardando..."]);
+  const [done, setDone] = React.useState(false);
 
-          const results: Array<{ serial: string; ok: boolean; error?: string }> = [];
-          let count = 0;
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const out: string[] = [];
+      const push = (s: string) => {
+        out.push(s);
+        if (!cancelled) setLog([...out]);
+      };
 
-          for (const m of MACHINES) {
-            const path = `${m.id}/${ITEM_ID}.jpg`;
-            const { error: upErr } = await supabaseAdmin.storage
-              .from("reference-photos")
-              .upload(path, buffer, { upsert: true, contentType: "image/jpeg" });
-            if (upErr) {
-              results.push({ serial: m.serial, ok: false, error: `upload: ${upErr.message}` });
-              continue;
-            }
-            const { error: dbErr } = await supabaseAdmin
-              .from("machine_reference_photos")
-              .upsert(
-                {
-                  machine_id: m.id,
-                  item_id: ITEM_ID,
-                  path,
-                  updated_at: new Date().toISOString(),
-                },
-                { onConflict: "machine_id,item_id" },
-              );
-            if (dbErr) {
-              results.push({ serial: m.serial, ok: false, error: `db: ${dbErr.message}` });
-              continue;
-            }
-            results.push({ serial: m.serial, ok: true });
-            count++;
-          }
+      const res = await fetch(luvaReducaoUrl);
+      const blob = await res.blob();
+      push(`asset carregado: ${blob.size} bytes`);
 
-          return Response.json({ count, results, assetUrl, assetSize: buffer.length });
-        } catch (e: any) {
-          return Response.json(
-            { error: "Exception", message: e?.message ?? String(e), stack: e?.stack },
-            { status: 500 },
-          );
+      let count = 0;
+      for (const m of MACHINES) {
+        const path = `${m.id}/${ITEM_ID}.jpg`;
+        const { error: upErr } = await supabase.storage
+          .from("reference-photos")
+          .upload(path, blob, { upsert: true, contentType: "image/jpeg" });
+        if (upErr) {
+          push(`✗ ${m.serial}: upload falhou - ${upErr.message}`);
+          continue;
         }
-      },
-    },
-  },
-});
+        const { error: dbErr } = await supabase
+          .from("machine_reference_photos")
+          .upsert(
+            {
+              machine_id: m.id,
+              item_id: ITEM_ID,
+              path,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "machine_id,item_id" },
+          );
+        if (dbErr) {
+          push(`✗ ${m.serial}: db upsert falhou - ${dbErr.message}`);
+          continue;
+        }
+        push(`✓ ${m.serial}: ${path}`);
+        count++;
+      }
+      push(`\nMáquinas que receberam a foto: ${count}`);
+      if (!cancelled) setDone(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <div style={{ padding: 24, fontFamily: "monospace", whiteSpace: "pre-wrap" }}>
+      <h1>Seed Luva de Redução</h1>
+      <pre>{log.join("\n")}</pre>
+      {done && <p style={{ color: "lime" }}>FINALIZADO</p>}
+    </div>
+  );
+}
