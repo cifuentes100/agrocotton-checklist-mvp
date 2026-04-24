@@ -300,6 +300,41 @@ verificação, há risco de superaquecimento do motor da colheitadeira.
 
 ---
 
+## ADR-012 — Renomear item #2 para "Oleo do motor" (separação Cool Gard / óleo)
+
+**Data:** 2026-04-24
+**Status:** ✅ Aceita e implementada
+
+**Contexto:**
+Após a inclusão do **Cool Gard** como item #1 (ADR-011), o item #2 ainda se
+chamava "Agua e oleo do motor" — texto herdado do checklist anterior, quando
+água e óleo eram inspecionados juntos. Com o Cool Gard agora cobrindo o
+líquido de arrefecimento de forma explícita, o item #2 passa a tratar
+exclusivamente do óleo do motor, e o método de verificação correto é a
+**vareta**.
+
+**Decisão:**
+- Item `id = 1` (`order_idx = 2`) renomeado para **"Oleo do motor"** com
+  descrição **"Verificar nivel do oleo na vareta"**.
+- `id` e `order_idx` preservados — apenas `name` e `description` mudam.
+  Histórico em `item_responses` permanece íntegro.
+- Trigger `trg_checklist_items_immutable` (que protege `order_idx`) não foi
+  afetada — o nome/descrição não estão sob a trigger, mas ela foi disabled/
+  enabled por precaução durante a migration.
+- Foto de referência (colagem didática "ok / max" da vareta + localização do
+  filtro de óleo na colheitadeira) propagada para as 2 máquinas existentes
+  via edge function de uso único `seed-oleo-motor-photo` (já removida).
+
+**Consequências:**
+- O implantador pode substituir a foto didática inicial pela foto real do
+  motor de cada máquina via UI ("Substituir foto").
+- Operadores agora têm instrução clara: **inspecionar a vareta**, não tentar
+  inferir o nível por outros meios.
+- Nenhuma mudança em código frontend (UI consome `name`/`description`
+  diretamente do banco).
+
+---
+
 ## 📝 Template para próximas decisões
 
 ```
