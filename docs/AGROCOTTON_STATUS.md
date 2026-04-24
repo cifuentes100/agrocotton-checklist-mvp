@@ -5,7 +5,7 @@
 > `AGROCOTTON_DECISIONS_LOG.md`.
 
 **Última atualização:** 2026-04-24
-**Fase atual:** Construção — Dashboard Admin
+**Fase atual:** Calibragem do catálogo de checklist + preparação para Dashboard Admin
 **Próximo marco:** Admin com backlog + dashboard + CRUD
 
 > **Nota (ADR-011):** o checklist agora tem **11 itens**, não 10. O novo #1 é
