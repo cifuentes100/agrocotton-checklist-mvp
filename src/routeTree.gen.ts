@@ -19,7 +19,6 @@ import { Route as ImplantadorIndexRouteImport } from './routes/implantador.index
 import { Route as MecanicoHistoricoRouteImport } from './routes/mecanico.historico'
 import { Route as ImplantadorMaquinasRouteImport } from './routes/implantador.maquinas'
 import { Route as ImplantadorReferenciasMachineIdRouteImport } from './routes/implantador.referencias.$machineId'
-import { Route as ApiPublicSeedLuvaReducaoRouteImport } from './routes/api.public.seed-luva-reducao'
 
 const MecanicoRoute = MecanicoRouteImport.update({
   id: '/mecanico',
@@ -72,12 +71,6 @@ const ImplantadorReferenciasMachineIdRoute =
     path: '/referencias/$machineId',
     getParentRoute: () => ImplantadorRoute,
   } as any)
-const ApiPublicSeedLuvaReducaoRoute =
-  ApiPublicSeedLuvaReducaoRouteImport.update({
-    id: '/api/public/seed-luva-reducao',
-    path: '/api/public/seed-luva-reducao',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -89,7 +82,6 @@ export interface FileRoutesByFullPath {
   '/mecanico/historico': typeof MecanicoHistoricoRoute
   '/implantador/': typeof ImplantadorIndexRoute
   '/mecanico/': typeof MecanicoIndexRoute
-  '/api/public/seed-luva-reducao': typeof ApiPublicSeedLuvaReducaoRoute
   '/implantador/referencias/$machineId': typeof ImplantadorReferenciasMachineIdRoute
 }
 export interface FileRoutesByTo {
@@ -100,7 +92,6 @@ export interface FileRoutesByTo {
   '/mecanico/historico': typeof MecanicoHistoricoRoute
   '/implantador': typeof ImplantadorIndexRoute
   '/mecanico': typeof MecanicoIndexRoute
-  '/api/public/seed-luva-reducao': typeof ApiPublicSeedLuvaReducaoRoute
   '/implantador/referencias/$machineId': typeof ImplantadorReferenciasMachineIdRoute
 }
 export interface FileRoutesById {
@@ -114,7 +105,6 @@ export interface FileRoutesById {
   '/mecanico/historico': typeof MecanicoHistoricoRoute
   '/implantador/': typeof ImplantadorIndexRoute
   '/mecanico/': typeof MecanicoIndexRoute
-  '/api/public/seed-luva-reducao': typeof ApiPublicSeedLuvaReducaoRoute
   '/implantador/referencias/$machineId': typeof ImplantadorReferenciasMachineIdRoute
 }
 export interface FileRouteTypes {
@@ -129,7 +119,6 @@ export interface FileRouteTypes {
     | '/mecanico/historico'
     | '/implantador/'
     | '/mecanico/'
-    | '/api/public/seed-luva-reducao'
     | '/implantador/referencias/$machineId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -140,7 +129,6 @@ export interface FileRouteTypes {
     | '/mecanico/historico'
     | '/implantador'
     | '/mecanico'
-    | '/api/public/seed-luva-reducao'
     | '/implantador/referencias/$machineId'
   id:
     | '__root__'
@@ -153,7 +141,6 @@ export interface FileRouteTypes {
     | '/mecanico/historico'
     | '/implantador/'
     | '/mecanico/'
-    | '/api/public/seed-luva-reducao'
     | '/implantador/referencias/$machineId'
   fileRoutesById: FileRoutesById
 }
@@ -163,7 +150,6 @@ export interface RootRouteChildren {
   ImplantadorRoute: typeof ImplantadorRouteWithChildren
   LoginRoute: typeof LoginRoute
   MecanicoRoute: typeof MecanicoRouteWithChildren
-  ApiPublicSeedLuvaReducaoRoute: typeof ApiPublicSeedLuvaReducaoRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -238,13 +224,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ImplantadorReferenciasMachineIdRouteImport
       parentRoute: typeof ImplantadorRoute
     }
-    '/api/public/seed-luva-reducao': {
-      id: '/api/public/seed-luva-reducao'
-      path: '/api/public/seed-luva-reducao'
-      fullPath: '/api/public/seed-luva-reducao'
-      preLoaderRoute: typeof ApiPublicSeedLuvaReducaoRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
@@ -284,7 +263,6 @@ const rootRouteChildren: RootRouteChildren = {
   ImplantadorRoute: ImplantadorRouteWithChildren,
   LoginRoute: LoginRoute,
   MecanicoRoute: MecanicoRouteWithChildren,
-  ApiPublicSeedLuvaReducaoRoute: ApiPublicSeedLuvaReducaoRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
