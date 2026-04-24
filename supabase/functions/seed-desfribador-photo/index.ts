@@ -1,9 +1,15 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { IMAGE_B64 } from "./image.ts";
 
-// Inline reference image (base64). Replaced at deploy time by build pipeline if needed.
-// We'll fetch from the published preview URL to avoid embedding a huge string.
-const IMAGE_URL = "https://id-preview--adc72325-bc73-43b2-bdbc-45035eda4981.lovable.app/src/assets/desfribador-a-referencia.jpg";
 const ITEM_ID = 3;
+
+function b64ToBytes(b64: string): Uint8Array {
+  const clean = b64.replace(/\s+/g, "");
+  const bin = atob(clean);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
 
 Deno.serve(async (_req) => {
   try {
@@ -12,12 +18,8 @@ Deno.serve(async (_req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Fetch image bytes
-    const imgRes = await fetch(IMAGE_URL);
-    if (!imgRes.ok) throw new Error(`Failed to fetch image: ${imgRes.status}`);
-    const imgBytes = new Uint8Array(await imgRes.arrayBuffer());
+    const imgBytes = b64ToBytes(IMAGE_B64);
 
-    // Get all machines
     const { data: machines, error: mErr } = await supabase
       .from("machines")
       .select("id");
