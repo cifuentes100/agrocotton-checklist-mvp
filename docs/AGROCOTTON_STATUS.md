@@ -5,7 +5,7 @@
 > `AGROCOTTON_DECISIONS_LOG.md`.
 
 **Última atualização:** 2026-04-24
-**Fase atual:** Construção — Dashboard Admin
+**Fase atual:** Calibragem do catálogo de checklist + preparação para Dashboard Admin
 **Próximo marco:** Admin com backlog + dashboard + CRUD
 
 > **Nota (ADR-011):** o checklist agora tem **11 itens**, não 10. O novo #1 é
@@ -95,21 +95,12 @@ Admin vê tudo no backlog
 
 ## 🗺️ Próximos passos imediatos
 
-1. **Construir tela do Implantador** (ADR-007)
-   - É o primeiro usuário real do sistema
-   - Sem ele, não há máquinas cadastradas nem fotos de referência
-   - Sem isso, operador não tem o que inspecionar
-
-2. **Construir tela do Mecânico**
-   - Fila Realtime de fotos NOK
-   - Validação (aprovar/reprovar + diagnóstico)
-
-3. **Construir Admin** (backlog + dashboard)
-   - Backlog + dashboard + CRUD
-
-4. **Construir Bot WhatsApp** (fora do Lovable, em Edge Function)
-   - Decidir provider antes
-   - Espelhar invariantes do SDD (RF-31, RF-03, RF-13, RF-36)
+1. ~~Calibragem do catálogo de checklist (12 itens validados)~~ ✅ 24/04/2026
+2. ~~Reset de dados de teste semanticamente quebrados~~ ✅ 24/04/2026
+3. Catalogar 8 warnings do linter Supabase (ADR-011 futuro)
+4. Construir Dashboard Admin (adaptado aos 12 itens do catálogo atual)
+5. Decidir ADR-003 (provider WhatsApp)
+6. Construir Bot WhatsApp
 
 ---
 
@@ -148,11 +139,34 @@ Admin vê tudo no backlog
 
 Para referência rápida, as regras que NUNCA podem ser quebradas:
 
-- **RF-31** — sequência imutável de 10 itens do checklist, finalização "Vamo cavalo!"
+- **RF-31** — sequência de **12 itens** (atualizada em 24/04/2026 — ver ADR-013), finalização "Vamo cavalo!". **Imutabilidade em runtime** (operador não pode pular ordem, aplicação/bot enforça). **Evolutividade em migrations** até o MVP alfa.
 - **RF-02/RF-13** — exibir APENAS o padrão correto. Nunca padrão incorreto.
 - **RF-03** — foto nova obrigatória em OK e NOK. Câmera direta; galeria bloqueada.
 - **RF-35** — contador de horas de lubrificação com alerta persistente.
 - **RF-36** — recusa exige justificativa textual ≥ 20 chars, auditável.
+
+---
+
+## 📋 Catálogo atual do checklist (24/04/2026)
+
+12 itens na ordem canônica de inspeção:
+
+| order_idx | id | Nome |
+|---|---|---|
+| 1 | 11 | Cool Gard (Água do motor tratada) |
+| 2 | 1 | Óleo do motor |
+| 3 | 3 | Limpeza e regulagem desfribador A |
+| 4 | 12 | Limpeza e regulagem desfribador B |
+| 5 | 2 | Gracheiro Mancal |
+| 6 | 4 | Gracheiro terceiro ponto |
+| 7 | 5 | Correias RMB |
+| 8 | 6 | Esteira RMB |
+| 9 | 7 | Correntes RMB |
+| 10 | 8 | Rolamentos RMB e cesto |
+| 11 | 9 | Calibragem de pneus (interno 50 / externo 45 / traseiro 50 PSI) |
+| 12 | 10 | Filtro de ar |
+
+Qualquer alteração futura exige ADR e ocorre antes do MVP alfa (ver ADR-013).
 
 ---
 

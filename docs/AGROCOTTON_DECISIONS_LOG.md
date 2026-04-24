@@ -335,6 +335,94 @@ exclusivamente do óleo do motor, e o método de verificação correto é a
 
 ---
 
+## ADR-013 — Catálogo de itens do checklist é evolutivo até o MVP alfa
+
+**Data:** 2026-04-24
+**Status:** ✅ Aceita e implementada
+**Supersedes parcialmente:** RF-31 (aplicação estrita)
+
+**Contexto:**
+O SDD original definiu RF-31 como "sequência IMUTÁVEL de 10 itens" com uma lista
+específica (água/óleo → hidráulico → ... → filtro de ar). Essa lista foi
+estabelecida antes de validação em campo real com a AgroCotton.
+
+Ao trabalhar com a Patrícia no Implantador, ficou claro que a realidade
+operacional do operador da AgroCotton é diferente do que o SDD assumiu:
+existem itens adicionais (Cool Gard, desfribador A, desfribador B),
+nomenclaturas específicas do negócio (Gracheiro Mancal, Gracheiro terceiro
+ponto), e ordem de inspeção diferente.
+
+**Decisão:**
+Catálogo de `checklist_items` (nome, descrição, ordem, quantidade) é
+**evolutivo** durante a fase de construção e validação do MVP. O trigger
+`trg_checklist_items_immutable` pode ser desabilitado em migrations SQL
+explícitas para permitir ajustes. A partir do MVP alfa (primeiro teste em
+produção com cliente real), o catálogo fica **congelado** e qualquer mudança
+exige novo ADR.
+
+**Evolução realizada em 24/04/2026:**
+Catálogo passou de 10 para 12 itens. Nova ordem (order_idx → id):
+1. Cool Gard (id=11) — novo
+2. Óleo do motor (id=1) — renomeado
+3. Limpeza e regulagem desfribador A (id=3) — renomeado + reordenado
+4. Limpeza e regulagem desfribador B (id=12) — novo
+5. Gracheiro Mancal (id=2) — renomeado
+6. Gracheiro terceiro ponto (id=4) — renomeado
+7-12. Demais itens originais (ids 5-10) reordenados.
+
+**Consequências:**
+- ✅ Sistema reflete realidade operacional da AgroCotton
+- ✅ RF-31 continua válido em **runtime** (operador não pula ordem, ordem é
+  seguida no fluxo do bot/app)
+- ⚠️ Trigger de imutabilidade pode ser desabilitado apenas dentro de
+  migrations SQL com justificativa clara — nunca em runtime de aplicação
+- ⚠️ item_responses com `item_id` renomeado perdem significado semântico
+  histórico. Dados de teste foram resetados em 24/04/2026 por decisão
+  explícita da product owner
+- ⚠️ Dashboards de métricas do Admin devem refletir os 12 itens atuais,
+  não os 10 originais
+
+**Definição de "MVP alfa" para congelamento:**
+Primeiro teste end-to-end com operador real da AgroCotton + máquina real +
+bot WhatsApp funcional. A partir desse momento, `trg_checklist_items_immutable`
+torna-se definitivamente intocável.
+
+---
+
+## ADR-014 — Governança de alterações de schema pelo Lovable
+
+**Data:** 2026-04-24
+**Status:** ✅ Aceita
+
+**Contexto:**
+Durante a sessão de 24/04/2026, o Lovable desabilitou o trigger
+`trg_checklist_items_immutable` em 4 migrations para executar autorizações de
+conteúdo da product owner (renomeação de itens). A autorização da Patrícia
+era sobre o **conteúdo** (o quê mudar); a decisão de desabilitar trigger foi
+**técnica** (como mudar). Essa separação precisa de regra explícita para não
+virar precedente.
+
+**Decisão:**
+Qualquer migration do Lovable que desabilite triggers de integridade ou
+altere constraints do schema deve:
+1. Estar documentada no changelog da sessão com justificativa clara
+2. Ser re-habilitada/restaurada ao final da mesma migration (nunca deixar
+   trigger desabilitado entre migrations)
+3. Ser referenciada no ADR correspondente (ex: ADR-013 referencia as 4
+   desabilitações de trigger feitas em 24/04)
+
+Alterações estruturais mais amplas (criar/dropar tabelas, alterar RLS
+policies, modificar schema de forma irreversível) exigem aprovação explícita
+da product owner **antes** da execução — o Lovable deve perguntar.
+
+**Consequências:**
+- ✅ Rastreabilidade clara de decisões técnicas
+- ✅ Separação entre autorização de conteúdo e autorização de schema
+- ⚠️ Próximos prompts ao Lovable devem reforçar essa regra quando
+  pedir mudanças que tocam o banco
+
+---
+
 ## 📝 Template para próximas decisões
 
 ```
