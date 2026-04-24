@@ -6,7 +6,7 @@
 
 **Última atualização:** 2026-04-24
 **Fase atual:** Construção — Dashboard Implantador
-**Próximo marco:** Login email/senha funcionando para 3 perfis técnicos
+**Próximo marco:** Implantador consegue cadastrar máquina e configurar 10 fotos de referência
 
 ---
 
@@ -70,7 +70,7 @@ Admin vê tudo no backlog
 ### Aplicação Web (Lovable)
 - [x] Autenticação por email/senha para mecânico/admin/implantador
 - [x] Rotas protegidas por perfil
-- [ ] Dashboard Implantador (cadastro de máquinas + fotos de referência)
+- [x] Dashboard Implantador — layout + lista de máquinas + configuração de 10 fotos por máquina (ADR-009)
 - [ ] Dashboard Mecânico (validação de fotos NOK em tempo real)
 - [ ] Dashboard Admin (backlog + dashboard + CRUD)
 
@@ -128,7 +128,9 @@ Admin vê tudo no backlog
     Se o usuário autenticar mas não existir em `public.users`, o app faz logout
     automático e mostra "Usuário sem permissão".
 - **Fotos de referência reais** dos 10 itens: precisam ser levantadas em campo pelo
-  implantador na primeira visita à AgroCotton.
+  implantador na primeira visita à AgroCotton. Conforme **ADR-009**, essas fotos são
+  agora armazenadas **por máquina** na tabela `machine_reference_photos` (não mais
+  globalmente em `checklist_items.reference_correct_path`, que ficou DEPRECATED).
 - **Contador de horas de lubrificação (RF-35)**: ainda não existe fonte de dados.
   Definir: será manual (operador informa) ou integrado com a máquina? MVP provavelmente
   manual.
