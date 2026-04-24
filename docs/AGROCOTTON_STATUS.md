@@ -139,11 +139,34 @@ Admin vê tudo no backlog
 
 Para referência rápida, as regras que NUNCA podem ser quebradas:
 
-- **RF-31** — sequência imutável de 10 itens do checklist, finalização "Vamo cavalo!"
+- **RF-31** — sequência de **12 itens** (atualizada em 24/04/2026 — ver ADR-013), finalização "Vamo cavalo!". **Imutabilidade em runtime** (operador não pode pular ordem, aplicação/bot enforça). **Evolutividade em migrations** até o MVP alfa.
 - **RF-02/RF-13** — exibir APENAS o padrão correto. Nunca padrão incorreto.
 - **RF-03** — foto nova obrigatória em OK e NOK. Câmera direta; galeria bloqueada.
 - **RF-35** — contador de horas de lubrificação com alerta persistente.
 - **RF-36** — recusa exige justificativa textual ≥ 20 chars, auditável.
+
+---
+
+## 📋 Catálogo atual do checklist (24/04/2026)
+
+12 itens na ordem canônica de inspeção:
+
+| order_idx | id | Nome |
+|---|---|---|
+| 1 | 11 | Cool Gard (Água do motor tratada) |
+| 2 | 1 | Óleo do motor |
+| 3 | 3 | Limpeza e regulagem desfribador A |
+| 4 | 12 | Limpeza e regulagem desfribador B |
+| 5 | 2 | Gracheiro Mancal |
+| 6 | 4 | Gracheiro terceiro ponto |
+| 7 | 5 | Correias RMB |
+| 8 | 6 | Esteira RMB |
+| 9 | 7 | Correntes RMB |
+| 10 | 8 | Rolamentos RMB e cesto |
+| 11 | 9 | Calibragem de pneus (interno 50 / externo 45 / traseiro 50 PSI) |
+| 12 | 10 | Filtro de ar |
+
+Qualquer alteração futura exige ADR e ocorre antes do MVP alfa (ver ADR-013).
 
 ---
 
