@@ -66,7 +66,7 @@ function MaquinasPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-100">Máquinas</h1>
           <p className="mt-1 text-sm text-slate-400">
-            Cadastre colheitadeiras e configure as 10 fotos de referência.
+            Cadastre colheitadeiras e configure as 11 fotos de referência.
           </p>
         </div>
         <Button
