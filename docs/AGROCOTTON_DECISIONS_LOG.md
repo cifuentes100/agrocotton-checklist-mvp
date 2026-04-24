@@ -266,6 +266,40 @@ Toda query cross-role no front deve usar a view, nunca a tabela raw.
 
 ---
 
+## ADR-011 — Inclusão do item "Cool Gard" como #1 do checklist
+
+**Data:** 2026-04-24
+**Status:** ✅ Aceita e implementada
+
+**Contexto:**
+A verificação de nível do **Cool Gard** (líquido de arrefecimento tratado do
+motor — Cool-Gard II 50/50) é uma rotina crítica que estava omitida da lista
+canônica de 10 itens. Identificada na revisão com Fernando e Márcio. Sem essa
+verificação, há risco de superaquecimento do motor da colheitadeira.
+
+**Decisão:**
+- Cool Gard entra como item **#1** do checklist (`order_idx = 1`).
+- Os 10 itens originais descem uma posição cada (#1→#2 ... #10→#11).
+- Os `id` originais são preservados — apenas o `order_idx` muda. Isso mantém
+  íntegros todos os históricos em `item_responses` (que referenciam `item_id`).
+- A trigger `trg_checklist_items_immutable` (que normalmente bloqueia mudanças
+  em `order_idx`) foi temporariamente desabilitada apenas durante a migration.
+- Foto de referência inicial (colagem didática Cool-Gard II + reservatório na
+  colheitadeira) propagada automaticamente para as 2 máquinas já cadastradas
+  via edge function de uso único `seed-coolgard-photo` (já removida após uso).
+
+**Consequências:**
+- O checklist passa a ter **11 etapas**, não mais 10. Toda menção a "10 itens"
+  precisa ser revisada (a UI já é dinâmica e não tem strings fixas).
+- Próximo run de cada máquina começa pelo Cool Gard (garantido pela trigger
+  `enforce_item_order` em `item_responses`).
+- O implantador pode substituir a foto didática inicial por uma foto real
+  específica de cada colheitadeira via UI existente ("Substituir foto").
+- Os IDs ficam não-sequenciais com `order_idx`: o item id=11 fica em #1, o
+  id=1 em #2, etc. Isso é intencional e não afeta nada.
+
+---
+
 ## 📝 Template para próximas decisões
 
 ```

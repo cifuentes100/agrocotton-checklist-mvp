@@ -8,6 +8,10 @@
 **Fase atual:** Construção — Dashboard Admin
 **Próximo marco:** Admin com backlog + dashboard + CRUD
 
+> **Nota (ADR-011):** o checklist agora tem **11 itens**, não 10. O novo #1 é
+> "Cool Gard (Água do motor tratada)". Todos os outros desceram uma posição.
+> Histórico antigo permanece íntegro porque os IDs internos foram preservados.
+
 ---
 
 ## 🎯 Visão geral do projeto
@@ -61,7 +65,7 @@ Admin vê tudo no backlog
 ### Infraestrutura
 - [x] Projeto Supabase criado (`agrocotton-mvp`, região São Paulo)
 - [x] Schema SQL executado (8 tabelas + RLS + triggers)
-- [x] Seed dos 10 itens canônicos do checklist (RF-31)
+- [x] Seed dos itens canônicos do checklist (RF-31) — **11 itens após ADR-011**
 - [x] Buckets de Storage criados (`checklist-photos`, `reference-photos`)
 - [x] Projeto Lovable criado (`AgroCotton Checklist MVP`)
 - [x] Integração Lovable ↔ Supabase autorizada e funcionando
@@ -127,10 +131,13 @@ Admin vê tudo no backlog
     ```
     Se o usuário autenticar mas não existir em `public.users`, o app faz logout
     automático e mostra "Usuário sem permissão".
-- **Fotos de referência reais** dos 10 itens: precisam ser levantadas em campo pelo
+- **Fotos de referência reais** dos 11 itens: precisam ser levantadas em campo pelo
   implantador na primeira visita à AgroCotton. Conforme **ADR-009**, essas fotos são
   agora armazenadas **por máquina** na tabela `machine_reference_photos` (não mais
   globalmente em `checklist_items.reference_correct_path`, que ficou DEPRECATED).
+  A foto do novo item #1 (Cool Gard) já foi propagada automaticamente para as
+  máquinas existentes (ADR-011) com uma colagem didática — o implantador pode
+  substituir por foto real específica quando for ao campo.
 - **Contador de horas de lubrificação (RF-35)**: ainda não existe fonte de dados.
   Definir: será manual (operador informa) ou integrado com a máquina? MVP provavelmente
   manual.
