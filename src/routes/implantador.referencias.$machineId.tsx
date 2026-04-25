@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ReferenceItemCard } from "@/components/implantador/ReferenceItemCard";
+import { EditChecklistItemDialog } from "@/components/implantador/EditChecklistItemDialog";
+import { useAuth } from "@/contexts/AuthContext";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -33,6 +35,8 @@ type RefPhoto = {
 function ReferenciasPage() {
   const { machineId } = Route.useParams();
   const navigate = useNavigate();
+  const { role } = useAuth();
+  const isAdmin = role === "admin";
 
   const [machine, setMachine] = React.useState<Machine | null>(null);
   const [items, setItems] = React.useState<ChecklistItem[]>([]);
@@ -42,6 +46,9 @@ function ReferenciasPage() {
   const [notFound, setNotFound] = React.useState(false);
   const [uploadingItem, setUploadingItem] = React.useState<number | null>(null);
   const [finalizing, setFinalizing] = React.useState(false);
+  const [movingItem, setMovingItem] = React.useState<number | null>(null);
+  const [editingItem, setEditingItem] = React.useState<ChecklistItem | null>(null);
+  const [editOpen, setEditOpen] = React.useState(false);
 
   const loadAll = React.useCallback(async () => {
     setLoading(true);
@@ -150,6 +157,37 @@ function ReferenciasPage() {
     toast.success("Foto de referência salva.");
   };
 
+  const reloadItems = React.useCallback(async () => {
+    const { data, error } = await supabase
+      .from("checklist_items")
+      .select("id, name, description, order_idx")
+      .order("order_idx", { ascending: true });
+    if (error) {
+      toast.error("Erro ao recarregar itens: " + error.message);
+      return;
+    }
+    setItems((data ?? []) as ChecklistItem[]);
+  }, []);
+
+  const handleMove = async (itemId: number, direction: "up" | "down") => {
+    setMovingItem(itemId);
+    const { error } = await supabase.rpc("move_checklist_item", {
+      _item_id: itemId,
+      _direction: direction,
+    });
+    setMovingItem(null);
+    if (error) {
+      toast.error("Erro ao mover: " + error.message);
+      return;
+    }
+    await reloadItems();
+  };
+
+  const handleEdit = (item: ChecklistItem) => {
+    setEditingItem(item);
+    setEditOpen(true);
+  };
+
   const handleFinalize = async () => {
     setFinalizing(true);
     const { error } = await supabase
@@ -236,7 +274,7 @@ function ReferenciasPage() {
       </div>
 
       <div className="space-y-3">
-        {items.map((item) => (
+        {items.map((item, idx) => (
           <ReferenceItemCard
             key={item.id}
             orderIdx={item.order_idx}
@@ -245,6 +283,13 @@ function ReferenciasPage() {
             photoUrl={signedUrls.get(item.id) ?? null}
             uploading={uploadingItem === item.id}
             onPickFile={(file) => handleUpload(item.id, file)}
+            canEdit={isAdmin}
+            canMoveUp={isAdmin && idx > 0}
+            canMoveDown={isAdmin && idx < items.length - 1}
+            moving={movingItem === item.id}
+            onEdit={() => handleEdit(item)}
+            onMoveUp={() => handleMove(item.id, "up")}
+            onMoveDown={() => handleMove(item.id, "down")}
           />
         ))}
       </div>
@@ -263,6 +308,13 @@ function ReferenciasPage() {
           </Button>
         </div>
       )}
+
+      <EditChecklistItemDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        item={editingItem}
+        onSaved={reloadItems}
+      />
     </div>
   );
 }

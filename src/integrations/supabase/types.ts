@@ -413,6 +413,10 @@ export type Database = {
     }
     Functions: {
       current_role: { Args: never; Returns: string }
+      move_checklist_item: {
+        Args: { _direction: string; _item_id: number }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

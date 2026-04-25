@@ -13,8 +13,9 @@ export const Route = createFileRoute("/implantador")({
 });
 
 function ImplantadorLayout() {
-  const { signOut } = useAuth();
+  const { signOut, role } = useAuth();
   const navigate = useNavigate();
+  const isAdmin = role === "admin";
 
   const handleSignOut = async () => {
     await signOut();
@@ -33,15 +34,28 @@ function ImplantadorLayout() {
             <span className="text-lg font-semibold text-slate-100">AgroCotton</span>
             <span className="text-sm text-slate-400">— Modo Implantador</span>
           </div>
-          <Button
-            onClick={handleSignOut}
-            variant="outline"
-            size="sm"
-            className="border-2 bg-transparent font-semibold hover:bg-violet-500/10"
-            style={{ borderColor: "#a78bfa", color: "#a78bfa" }}
-          >
-            Sair
-          </Button>
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <Button
+                onClick={() => navigate({ to: "/admin" })}
+                variant="outline"
+                size="sm"
+                className="border-2 bg-transparent font-semibold hover:bg-emerald-500/10"
+                style={{ borderColor: "#25D366", color: "#25D366" }}
+              >
+                Voltar para Admin
+              </Button>
+            )}
+            <Button
+              onClick={handleSignOut}
+              variant="outline"
+              size="sm"
+              className="border-2 bg-transparent font-semibold hover:bg-violet-500/10"
+              style={{ borderColor: "#a78bfa", color: "#a78bfa" }}
+            >
+              Sair
+            </Button>
+          </div>
         </header>
 
         <div className="flex min-h-[calc(100vh-4rem)]">

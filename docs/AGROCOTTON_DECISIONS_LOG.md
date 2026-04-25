@@ -490,6 +490,49 @@ Após MVP alfa validado em produção com a AgroCotton. Idealmente como parte da
 
 ---
 
+## ADR-016 — Edição admin do catálogo via UI durante implantação (versão mínima de ADR-015)
+
+**Data:** 2026-04-25
+**Status:** ✅ Aceita e implementada
+**Relaciona-se com:** ADR-013 (catálogo evolutivo via migrations), ADR-015 (versão completa adiada)
+
+**Contexto:**
+Durante a fase de implantação inicial, o catálogo de itens do checklist ainda está em
+calibragem (ver ADR-013). Pedir uma sessão técnica/migration para cada renomear ou
+trocar de ordem é caro e lento. ADR-015 propôs uma versão completa (state machine,
+soft delete, audit log, governança fina), mas foi adiado para pós-MVP alfa.
+
+A admin (Patrícia) pediu uma versão mínima durante esta fase: poder renomear e
+reordenar itens diretamente na UI, sem migrations.
+
+**Decisão:**
+Liberar **rename + reorder** (sem add/remove, sem soft delete, sem audit) na própria
+página de configuração de referências (`/implantador/referencias/:machineId`),
+restrito a `role = 'admin'`. Adicionalmente, expor botão "Modo Implantador" no
+painel admin (e "Voltar para Admin" no painel implantador) já que o admin é quem
+faz/supervisiona implantação nesta fase.
+
+Implementação:
+- Removido o trigger `trg_checklist_items_immutable` (que bloqueava qualquer mudança
+  em `order_idx`). A invariante "operador não pula ordem em uma inspeção" continua
+  protegida pelo trigger `enforce_item_order` em `item_responses` — ou seja, RF-31
+  permanece válido em **runtime**, mas o catálogo é editável administrativamente.
+- Nova policy `UPDATE` em `checklist_items` restrita a admin.
+- RPC `move_checklist_item(_item_id, _direction)` em `SECURITY DEFINER` faz swap
+  atômico de `order_idx` entre vizinhos (via valor temporário negativo).
+- UI: botão lápis + setas ↑↓ no `ReferenceItemCard`, visíveis só quando `role==='admin'`.
+
+**Consequências:**
+- ✅ Patrícia não precisa mais pedir migration para ajustes de nome/ordem
+- ✅ ADR-013 (evolutividade) ganha um caminho de UI, não só migrations
+- ✅ RF-31 segue garantido em runtime
+- ⚠️ Sem audit log: mudanças não ficam registradas (aceito por ora — fase de calibragem)
+- ⚠️ Sem soft delete e sem add via UI: continua precisando de migration. ADR-015
+  permanece como referência da versão completa pós-MVP alfa
+- ⚠️ Implantadores comuns (não-admin) continuam só com leitura do catálogo
+
+---
+
 ## 📝 Template para próximas decisões
 
 ```
