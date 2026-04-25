@@ -251,9 +251,13 @@ function ReferenciasPage() {
       </Link>
 
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-100">
-          Configurar referências —{" "}
-          <span className="font-mono" style={{ color: "#a78bfa" }}>
+        <h1 className="text-xl font-bold text-slate-100 md:text-2xl">
+          <span className="block sm:inline">Configurar referências</span>
+          <span className="hidden sm:inline"> — </span>
+          <span
+            className="block break-all font-mono sm:inline"
+            style={{ color: "#a78bfa" }}
+          >
             {machine.serial}
           </span>
         </h1>
@@ -302,7 +306,7 @@ function ReferenciasPage() {
             type="button"
             variant="outline"
             onClick={() => setAddOpen(true)}
-            className="border-dashed bg-transparent font-medium hover:bg-violet-500/10"
+            className="w-full border-dashed bg-transparent font-medium hover:bg-violet-500/10 md:w-auto"
             style={{ borderColor: "#a78bfa", color: "#a78bfa" }}
           >
             <Plus className="mr-1 h-4 w-4" />
@@ -312,11 +316,11 @@ function ReferenciasPage() {
       )}
 
       {allConfigured && (
-        <div className="mt-8 flex justify-end">
+        <div className="mt-8 flex flex-col md:flex-row md:justify-end">
           <Button
             onClick={handleFinalize}
             disabled={finalizing}
-            className="font-semibold text-slate-900 hover:opacity-90"
+            className="w-full font-semibold text-slate-900 hover:opacity-90 md:w-auto"
             style={{ backgroundColor: "#a78bfa" }}
             size="lg"
           >
