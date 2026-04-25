@@ -1,51 +1,53 @@
-## Problema
+## Problema confirmado
 
-O webhook do WhatsApp já está recebendo as mensagens da uazapi corretamente (confirmado nos logs), mas falha ao gravar no banco com erro 500:
+O webhook da uazapi chega no servidor mas falha com **HTTP 500**:
 
 ```
-Missing Supabase server environment variables. 
+Missing Supabase server environment variables.
 Ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set.
 ```
 
-## Causa
+Confirmei agora:
+- No **Supabase** existem `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` ✅
+- No **Lovable** (runtime do Worker) só existem `LOVABLE_API_KEY`, `UAZAPI_HOST`, `UAZAPI_TOKEN` ❌
 
-O arquivo `src/integrations/supabase/client.server.ts` lê `process.env.SUPABASE_URL` e `process.env.SUPABASE_SERVICE_ROLE_KEY`. Essas variáveis **não estão configuradas no runtime** do servidor (só aparecem `LOVABLE_API_KEY`, `UAZAPI_HOST`, `UAZAPI_TOKEN`).
+Os secrets do Supabase **não são automaticamente injetados** no runtime do TanStack/Cloudflare Worker. Eles só ficam disponíveis nas Edge Functions do próprio Supabase. Para o `client.server.ts` ler via `process.env.*`, precisam ser adicionados também como secrets do Lovable.
 
-## Solução
+## Solução (sem mudança de código)
 
-### Passo 1 — Adicionar a `SUPABASE_SERVICE_ROLE_KEY` como secret do servidor
-Vou disparar o formulário de adição de secret pra você colar a chave. A chave já existe no projeto Supabase — você só precisa pegar e colar.
+### Passo 1 — Adicionar `SUPABASE_URL` como secret do Lovable
+Valor: `https://ctzajxycetufjkpqhidz.supabase.co`
+(Esse valor não é sensível — é o mesmo que já está no `.env` público.)
 
-**Onde encontrar a chave:**
-1. Abrir o painel do Supabase do projeto
-2. Ir em **Project Settings → API**
-3. Copiar o valor do campo **service_role** (NÃO o `anon`/`publishable`)
-4. Colar no formulário que vou abrir aqui no Lovable
+### Passo 2 — Adicionar `SUPABASE_SERVICE_ROLE_KEY` como secret do Lovable
+**Onde pegar:**
+1. Abrir https://supabase.com/dashboard/project/ctzajxycetufjkpqhidz/settings/api
+2. Rolar até **Project API keys**
+3. Copiar o valor do campo **`service_role`** (clicar em "Reveal" — é o longo, NÃO o `anon`)
+4. Colar no formulário que vou abrir
 
-### Passo 2 — Adicionar também `SUPABASE_URL` como secret do servidor
-Já tem no `.env`, mas pra garantir que esteja disponível no runtime do worker, vou adicionar como secret também. Valor: `https://ctzajxycetufjkpqhidz.supabase.co`
+### Passo 3 — Aguardar redeploy (~30s) e re-testar
+- Mandar "oi" no WhatsApp pro número conectado
+- Esperado: receber `🤖 Recebi: «oi»` de volta
+- A mensagem deve aparecer na tabela `whatsapp_messages` (linhas inbound + outbound)
 
-### Passo 3 — Aguardar redeploy e re-testar
-Depois que você salvar os secrets, o servidor faz redeploy em ~30s. Aí você manda outro "oi" no WhatsApp e:
-- A mensagem deve aparecer gravada na tabela `whatsapp_messages`
-- Você deve receber a resposta automática `🤖 Recebi: «oi»`
-
-### Passo 4 — Confirmar nos logs
-Vou checar os logs do servidor pra confirmar que:
-- O POST do webhook retornou 200 (não mais 500)
+### Passo 4 — Verificar nos logs do servidor
+Confirmar que:
+- O POST do webhook retorna 200
 - A inserção em `whatsapp_messages` foi bem-sucedida
-- O envio da resposta via `/send/text` da uazapi também foi 200
+- O envio via uazapi `/send/text` retornou 200
 
-### Passo 5 — Limpeza opcional (depois que tudo funcionar)
-- Remover o arquivo `src/routes/api.public.diag.env.ts` (era só pra diagnóstico)
+### Passo 5 (opcional) — Limpeza
+- Remover `src/routes/api.public.diag.env.ts` que era só pra diagnóstico
 
 ## Riscos / observações
 
-- A `service_role_key` bypassa RLS — é usada SÓ no servidor, nunca no cliente. Já está sendo usada corretamente apenas em `client.server.ts`.
-- Não há mudança de código nesse plano — só configuração de secrets. O código do webhook está correto.
+- A `service_role_key` bypassa RLS — é usada **só** no servidor (`client.server.ts`), nunca no cliente. Já está sendo usada corretamente.
+- Não há mudança de código — só configuração de secrets.
+- O webhook (`src/routes/api.public.whatsapp.webhook.ts`) já está completo: log, parsing flexível, insert no banco e echo bot.
 
 ## Detalhes técnicos
 
-- O cliente admin é instanciado via Proxy lazy em `client.server.ts`, então a primeira chamada no webhook dispara a leitura de `process.env`. Sem as vars, ele lança o erro que vimos.
-- Adicionar via tool `secrets--add_secret` no Lovable disponibiliza as vars como `process.env.*` no runtime do worker TanStack.
-- O webhook (`src/routes/api.public.whatsapp.webhook.ts`) já está correto: tem POST handler, logs detalhados, parsing flexível do payload da uazapi e echo bot funcionando.
+- `src/integrations/supabase/client.server.ts` instancia o client admin via Proxy lazy lendo `process.env.SUPABASE_URL` e `process.env.SUPABASE_SERVICE_ROLE_KEY`. Sem essas vars, lança o erro visto.
+- Adicionar via `secrets--add_secret` no Lovable expõe as vars como `process.env.*` no Worker em runtime.
+- Os mesmos secrets já existem no Supabase mas não cruzam para o Worker do Lovable automaticamente.
