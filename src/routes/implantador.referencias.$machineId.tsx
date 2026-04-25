@@ -296,6 +296,21 @@ function ReferenciasPage() {
         ))}
       </div>
 
+      {isAdmin && (
+        <div className="mt-4 flex justify-center">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setAddOpen(true)}
+            className="border-dashed bg-transparent font-medium hover:bg-violet-500/10"
+            style={{ borderColor: "#a78bfa", color: "#a78bfa" }}
+          >
+            <Plus className="mr-1 h-4 w-4" />
+            Adicionar item ao checklist
+          </Button>
+        </div>
+      )}
+
       {allConfigured && (
         <div className="mt-8 flex justify-end">
           <Button
@@ -316,6 +331,12 @@ function ReferenciasPage() {
         onOpenChange={setEditOpen}
         item={editingItem}
         onSaved={reloadItems}
+      />
+
+      <AddChecklistItemDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        onAdded={reloadItems}
       />
     </div>
   );
