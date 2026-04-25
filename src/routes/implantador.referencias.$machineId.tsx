@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ReferenceItemCard } from "@/components/implantador/ReferenceItemCard";
+import { EditChecklistItemDialog } from "@/components/implantador/EditChecklistItemDialog";
+import { useAuth } from "@/contexts/AuthContext";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -33,6 +35,8 @@ type RefPhoto = {
 function ReferenciasPage() {
   const { machineId } = Route.useParams();
   const navigate = useNavigate();
+  const { role } = useAuth();
+  const isAdmin = role === "admin";
 
   const [machine, setMachine] = React.useState<Machine | null>(null);
   const [items, setItems] = React.useState<ChecklistItem[]>([]);
@@ -42,6 +46,9 @@ function ReferenciasPage() {
   const [notFound, setNotFound] = React.useState(false);
   const [uploadingItem, setUploadingItem] = React.useState<number | null>(null);
   const [finalizing, setFinalizing] = React.useState(false);
+  const [movingItem, setMovingItem] = React.useState<number | null>(null);
+  const [editingItem, setEditingItem] = React.useState<ChecklistItem | null>(null);
+  const [editOpen, setEditOpen] = React.useState(false);
 
   const loadAll = React.useCallback(async () => {
     setLoading(true);
