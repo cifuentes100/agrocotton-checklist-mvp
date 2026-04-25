@@ -43,6 +43,31 @@ function normalizePhone(raw?: string): string | null {
   return digits.length >= 10 ? digits : null;
 }
 
+/**
+ * Resumo seguro dos headers para log: mascara qualquer header
+ * que possa conter token/credencial.
+ */
+function headerSummary(headers: Headers): Record<string, string> {
+  const out: Record<string, string> = {};
+  const SENSITIVE = new Set([
+    "authorization",
+    "token",
+    "x-api-key",
+    "apikey",
+    "cookie",
+    "x-auth-token",
+  ]);
+  headers.forEach((value, key) => {
+    const lower = key.toLowerCase();
+    if (SENSITIVE.has(lower)) {
+      out[key] = `<present:${value.length}chars>`;
+    } else {
+      out[key] = value.length > 200 ? value.slice(0, 200) + "…" : value;
+    }
+  });
+  return out;
+}
+
 function extractMessage(payload: UazapiInbound) {
   // Tenta nos formatos conhecidos da uazapi
   const m = payload.message ?? payload.data?.message ?? payload.data;
