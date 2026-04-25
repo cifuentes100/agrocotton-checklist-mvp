@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Button } from "@/components/ui/button";
-import { Camera, Loader2 } from "lucide-react";
+import { Camera, ChevronDown, ChevronUp, Loader2, Pencil } from "lucide-react";
 
 type Props = {
   orderIdx: number;
@@ -9,6 +9,13 @@ type Props = {
   photoUrl: string | null;
   uploading: boolean;
   onPickFile: (file: File) => void;
+  canEdit?: boolean;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+  moving?: boolean;
+  onEdit?: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 };
 
 export function ReferenceItemCard({
@@ -18,6 +25,13 @@ export function ReferenceItemCard({
   photoUrl,
   uploading,
   onPickFile,
+  canEdit = false,
+  canMoveUp = false,
+  canMoveDown = false,
+  moving = false,
+  onEdit,
+  onMoveUp,
+  onMoveDown,
 }: Props) {
   const inputRef = React.useRef<HTMLInputElement>(null);
 
