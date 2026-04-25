@@ -58,14 +58,50 @@ export function ReferenceItemCard({
 
       {/* Conteúdo */}
       <div className="flex flex-1 flex-col">
-        <div className="flex items-baseline gap-2">
-          <span
-            className="text-sm font-bold"
-            style={{ color: "#a78bfa" }}
-          >
-            #{orderIdx}
-          </span>
-          <h3 className="font-semibold text-slate-100">{name}</h3>
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-baseline gap-2">
+            <span className="text-sm font-bold" style={{ color: "#a78bfa" }}>
+              #{orderIdx}
+            </span>
+            <h3 className="font-semibold text-slate-100">{name}</h3>
+          </div>
+          {canEdit && (
+            <div className="flex shrink-0 items-center gap-1">
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                onClick={onEdit}
+                disabled={moving}
+                title="Editar nome e descrição"
+                className="h-7 w-7 text-slate-400 hover:bg-violet-500/10 hover:text-violet-300"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                onClick={onMoveUp}
+                disabled={!canMoveUp || moving}
+                title="Mover para cima"
+                className="h-7 w-7 text-slate-400 hover:bg-violet-500/10 hover:text-violet-300 disabled:opacity-30"
+              >
+                <ChevronUp className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                onClick={onMoveDown}
+                disabled={!canMoveDown || moving}
+                title="Mover para baixo"
+                className="h-7 w-7 text-slate-400 hover:bg-violet-500/10 hover:text-violet-300 disabled:opacity-30"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </div>
         {description && (
           <p className="mt-1 text-sm text-slate-400">{description}</p>
