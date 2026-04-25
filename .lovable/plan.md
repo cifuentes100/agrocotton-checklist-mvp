@@ -1,98 +1,93 @@
 ## Objetivo
 
-Permitir que o implantador clone uma máquina existente (status `ready`) gerando uma nova com serial diferente e copiando automaticamente as fotos de referência configuradas. Isso elimina o retrabalho de fotografar 11+ itens em máquinas idênticas da mesma fazenda.
+Validar end-to-end o **echo bot do WhatsApp** que já está implementado no código, usando a instância real `ExfblC` da uazapi (`https://free.uazapi.com`). Sem código novo — só configuração de secrets, registro do webhook na uazapi e teste real enviando mensagem de um celular.
 
-## Ajustes em relação ao prompt original
+## Estado atual (já pronto no código)
 
-O prompt fornecido está escrito assumindo Supabase Edge Functions (Deno), mas este projeto usa **TanStack Start com `createServerFn`** rodando no Worker (a documentação interna é explícita: "Do NOT use Supabase Edge Functions"). Vou seguir a arquitetura correta do projeto. Outros ajustes:
+- Webhook público: `src/routes/api.public.whatsapp.webhook.ts`
+  - `GET` → health-check (retorna `{ok, configured}`).
+  - `POST` → recebe mensagem da uazapi, loga em `whatsapp_messages`, ignora `fromMe`, e responde `🤖 Recebi: «texto»` via `POST /send/text` da uazapi.
+- Tabela `whatsapp_messages` com RLS (admin lê tudo).
+- Secrets `UAZAPI_HOST` e `UAZAPI_TOKEN` já existem no Supabase, mas com valores antigos/placeholder — vamos sobrescrever.
 
-- A coluna em `machine_reference_photos` chama-se `path` (não `photo_path`).
-- Toast usa `sonner` (`toast.success/error`), não `useToast`.
-- As RLS policies de `machine_reference_photos` já permitem insert por admin/implantador — não é preciso criar policy nova.
-- Hoje o checklist tem N itens (qualquer quantidade — admin pode adicionar). O texto "12 fotos" no modal será dinâmico ("X itens").
+## O que será feito
 
-## O que será construído
+### 1. Atualizar os dois secrets do Supabase
 
-### 1. Server function `cloneMachine` (substitui a Edge Function)
+- `UAZAPI_HOST` = `https://free.uazapi.com`
+- `UAZAPI_TOKEN` = `0e4ee35f-61c7-40f4-a4b6-35a8725bcb9d` (token da instância `ExfblC`)
 
-Arquivo novo: `src/server/machines.functions.ts`
+Faço isso com a ferramenta de secrets do Lovable. Não vai pro código nem pro `.env` do repositório.
 
-- `createServerFn({ method: "POST" })` com `requireSupabaseAuth` middleware.
-- Input validado com Zod: `{ sourceMachineId, newSerial, newLocation?, newYear?, copyPhotos }`.
-- Validação de role (`implantador` ou `admin`) via `users` table.
-- Validação de serial único antes de inserir.
-- Busca máquina origem; copia `model`, `specs`, e — se não fornecido — `year`/`location`.
-- Cria nova máquina com `status = copyPhotos ? "ready" : "pending"`.
-- Se `copyPhotos`:
-  - Lê `machine_reference_photos` da origem usando o cliente autenticado.
-  - Para cada foto, usa `supabaseAdmin.storage.from("reference-photos").copy(srcPath, destPath)` onde `destPath = ${newMachine.id}/${item_id}.jpg`.
-  - Faz upsert dos registros na tabela `machine_reference_photos` para a nova máquina.
-  - Em caso de falha em qualquer cópia: rollback (delete da máquina criada + delete dos arquivos já copiados no Storage).
-- Retorna `{ machine, photosCopied }`.
+### 2. Verificar o endpoint de webhook está acessível
 
-### 2. Modal `CloneMachineDialog`
+Chamar `GET https://<preview-url>/api/public/whatsapp/webhook` e conferir que responde:
+```json
+{ "ok": true, "service": "whatsapp-webhook", "configured": true }
+```
 
-Arquivo novo: `src/components/implantador/CloneMachineDialog.tsx`
+`configured: true` confirma que os secrets estão visíveis para o servidor.
 
-Segue o padrão visual do `MachineFormDialog` (mesmo dark theme, cor `#a78bfa`):
+### 3. Simular um POST de inbound (smoke test sem precisar do celular)
 
-- Props: `{ open, onOpenChange, sourceMachine, totalItemsCount, onCloned }`.
-- Cabeçalho mostra o serial origem em destaque.
-- Campos:
-  - **Modelo** (read-only, vem da origem).
-  - **Ano** (editável, prefill com origem).
-  - **Serial** (obrigatório, validação em tempo real via debounce: query em `machines` por `serial`).
-  - **Localização** (editável, prefill com origem).
-  - **Checkbox "Copiar fotos de referência (N itens)"** (default: true). Se desmarcado, mostra aviso de que a máquina nascerá `pending`.
-- Botão "Clonar agora": disabled quando serial vazio/duplicado/loading. Texto muda para "Clonando… (pode levar alguns segundos)" durante a operação.
-- Chama `useServerFn(cloneMachine)`. Em sucesso: `toast.success`, fecha modal, chama `onCloned()` (recarrega lista). Em erro: `toast.error` com mensagem retornada.
+Mando um POST de teste pro nosso webhook com payload imitando a uazapi:
+```json
+{
+  "event": "messages",
+  "message": {
+    "fromMe": false,
+    "sender": "5564999999999@s.whatsapp.net",
+    "text": "ping de teste",
+    "id": "test-msg-001",
+    "type": "text"
+  }
+}
+```
 
-### 3. Botão "Clonar" na lista de máquinas
+Esperado:
+- Response `{ ok: true, replied: true/false }`.
+- Linha inbound em `whatsapp_messages` com `body = "ping de teste"`.
+- Linha outbound com `body = "🤖 Recebi: «ping de teste»"` e `status = sent` (se a uazapi aceitou) ou `failed` (se número 5564999... não existe — esperado, esse é fake).
 
-Edição em `src/routes/implantador.maquinas.tsx`:
+Se o outbound falhar com erro tipo "número não encontrado", ótimo: prova que a autenticação na uazapi está OK.
 
-- Na coluna "Ações", adicionar botão "Clonar" com ícone `Copy` ao lado de "Configurar fotos".
-- Botão só aparece quando `m.status === "ready"`.
-- Ao clicar, abre `CloneMachineDialog` com `sourceMachine` setado.
-- Após clonagem bem-sucedida: chama `load()` para refrescar a tabela.
+### 4. Você configura o webhook na uazapi
 
-### 4. Carregar contagem total de itens do checklist
+Na painel da uazapi, na instância `ExfblC`, registrar webhook:
+- **URL:** `https://<preview-url-do-projeto>/api/public/whatsapp/webhook`
+- **Events:** `messages`
+- **excludeMessages:** `wasSentByApi` (evita loop infinito do bot respondendo a si mesmo)
 
-Para mostrar "(N itens)" no checkbox, a página de máquinas faz um `count` em `checklist_items` ao montar (uma vez), e passa para o modal.
+Te passo a URL exata no momento da execução.
+
+### 5. Teste real
+
+Você manda um `oi` do seu celular pro número conectado na instância `ExfblC`. O bot deve responder `🤖 Recebi: «oi»` em segundos. Conferimos:
+- Logs do servidor (via `server-function-logs`).
+- Linhas inbound + outbound em `whatsapp_messages`.
 
 ## Detalhes técnicos
 
-**Caminhos de Storage:** o código atual usa `${machineId}/${itemId}.jpg`. A clonagem usa o mesmo padrão para o destino, derivando do `newMachine.id`.
+**Por que o token da instância e não o admin token:** o endpoint `/send/text` da uazapi autentica por instância (header `token: <instance-token>`). O admin token serve só pra criar/listar instâncias via `/instance/*`, que não usamos.
 
-**Por que server function e não chamar `storage.copy()` direto do browser:** o cliente browser autenticado pode chamar `.copy()`, mas exige policies específicas no bucket privado e expõe lógica de rollback no cliente (frágil). Server function com `supabaseAdmin` para Storage + cliente autenticado para checagem de role é mais robusto, atômico e replica o padrão já usado em `api.public.whatsapp.webhook.ts`.
+**Por que `excludeMessages: wasSentByApi`:** sem isso, toda resposta do bot voltaria como inbound (porque a própria uazapi notifica mensagens enviadas), gerando loop. O nosso webhook já tem proteção via `parsed.fromMe`, mas filtrar na origem é mais barato.
 
-**Rollback:** se qualquer `storage.copy()` falhar, o handler:
-1. Lista os destinos já copiados.
-2. Faz `storage.remove([...destPaths])`.
-3. Deleta as linhas inseridas em `machine_reference_photos`.
-4. Deleta a `machines` recém-criada.
-5. Retorna erro descritivo.
+**RLS de `whatsapp_messages`:** só admin lê via cliente autenticado. Para inspecionar durante o teste vou usar `supabase--read_query` (bypassa RLS).
 
-**RLS:** as policies existentes em `machine_reference_photos` e `machines` já cobrem inserts por implantador/admin via cliente autenticado. Como a server function valida role explicitamente e usa `supabaseAdmin` apenas para o Storage `.copy()` (Storage não tem nossas RLS de role customizadas), está coberto sem migration.
-
-**Validação de role na server function:** consulta `users` table com o `userId` do middleware e checa `role in ('admin','implantador')`. Retorna 403 se não autorizado.
-
-## Arquivos afetados
-
-- **Novo:** `src/server/machines.functions.ts`
-- **Novo:** `src/components/implantador/CloneMachineDialog.tsx`
-- **Editado:** `src/routes/implantador.maquinas.tsx` (botão Clonar + carregar count + estado do modal)
-
-## Critérios de aceite
-
-- Botão "Clonar" aparece só em máquinas com status `ready`.
-- Serial duplicado é bloqueado tanto na UI (em tempo real) quanto na server function.
-- Clonando com fotos: nova máquina nasce `ready` com todas as fotos visíveis em "Configurar fotos".
-- Clonando sem fotos: nova máquina nasce `pending` e abre fluxo normal de configuração.
-- Falha de cópia faz rollback completo (sem máquinas órfãs nem arquivos vazados).
-- Toast de sucesso/erro funciona; lista recarrega após sucesso.
+**Segurança lembrete:** depois do teste, gerar token novo na uazapi e atualizar `UAZAPI_TOKEN` — o atual foi exposto no chat.
 
 ## Fora do escopo desta tarefa
 
-- Ajuste em `docs/AGROCOTTON_STATUS.md` / ADR (faço numa próxima sessão se quiser registrar a decisão arquitetural de usar server function em vez de Edge Function).
-- Botão "Clonar" no Dashboard Admin (tarefa do RF-35).
+- Identificação do operador (cruzar phone com `users` table).
+- Máquina de estado da conversa (escolher máquina, pedir foto item por item, criar `checklist_runs` / `item_responses`).
+- Recebimento e armazenamento de fotos vindas do WhatsApp no bucket `checklist-photos`.
+- Validação de assinatura HMAC do webhook (a uazapi não envia assinatura nativa; cobertura via secret no path se quisermos depois).
+
+Tudo isso fica para sessões seguintes — entram como ADRs/RFs separados quando você decidir avançar pro fluxo completo.
+
+## Critérios de aceite
+
+- `GET /api/public/whatsapp/webhook` retorna `configured: true`.
+- POST simulado cria registros inbound + outbound em `whatsapp_messages`.
+- Mensagem real do celular faz o bot responder `🤖 Recebi: «...»` em ≤ 5s.
+- Nenhum loop de mensagens (bot respondendo a si mesmo).
