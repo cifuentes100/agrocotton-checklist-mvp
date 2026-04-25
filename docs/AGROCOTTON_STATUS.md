@@ -98,12 +98,10 @@ Admin vê tudo no backlog
 
 ## 🗺️ Próximos passos imediatos
 
-1. ~~Calibragem do catálogo de checklist (12 itens validados)~~ ✅ 24/04/2026
-2. ~~Reset de dados de teste semanticamente quebrados~~ ✅ 24/04/2026
-3. Catalogar 8 warnings do linter Supabase (ADR-011 futuro)
-4. Construir Dashboard Admin (adaptado aos 12 itens do catálogo atual)
-5. Decidir ADR-003 (provider WhatsApp)
-6. Construir Bot WhatsApp
+1. Concluir verificação de RLS e catalogar findings (ADR futuro se necessário)
+2. Construir Dashboard Admin (RF-35: contador de lubrificação + relatórios + CRUD usuários)
+3. Decidir ADR-003 (provider WhatsApp: uazapi vs Cloud API)
+4. Construir Bot WhatsApp (após ADR-003 resolvido)
 
 ---
 
