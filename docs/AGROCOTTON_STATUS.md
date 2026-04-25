@@ -70,6 +70,9 @@ Admin vê tudo no backlog
 - [x] Projeto Lovable criado (`AgroCotton Checklist MVP`)
 - [x] Integração Lovable ↔ Supabase autorizada e funcionando
 - [x] Landing page inicial renderizando
+- [x] Repositório GitHub conectado (privado: `cifuentes100/agrocotton-checklist-mvp`)
+- [x] Sincronização automática Lovable ↔ GitHub (150+ commits do lovable-dev[bot])
+- [x] Backup versionado do código-fonte estabelecido
 
 ### Aplicação Web (Lovable)
 - [x] Autenticação por email/senha para mecânico/admin/implantador
