@@ -533,6 +533,44 @@ Implementação:
 
 ---
 
+## ADR-017 — GitHub como backup e controle de versão do código-fonte
+
+**Data:** 2026-04-25
+**Status:** ✅ Aceita e implementada
+
+**Contexto:**
+Até a sessão de 24/04/2026, o código-fonte existia apenas no storage interno 
+do Lovable. Isso criava três riscos: (1) perda de trabalho caso o Lovable 
+sobrescrevesse arquivos em prompts mal-interpretados (sem possibilidade de 
+rollback), (2) dependência total de um fornecedor único (lock-in), 
+(3) impossibilidade de auditoria do que mudou a cada prompt.
+
+**Decisão:**
+Conectado o projeto Lovable ao GitHub via OAuth com permissão "Only select
+repositories" (princípio do menor privilégio). Criado repositório privado
+`cifuentes100/agrocotton-checklist-mvp`. A partir desta decisão, cada prompt
+executado no Lovable gera automaticamente um commit no GitHub com autoria
+`lovable-dev[bot]`.
+
+**Alternativas consideradas:**
+- **Repositório público:** descartado. Mesmo sem licença impedindo uso, expõe
+  estrutura do MVP em fase de validação com cliente (FL Serviços). Código
+  pode ficar público depois, se fizer sentido estratégico.
+- **Download manual periódico do Lovable:** descartado. Não escala, não
+  registra histórico granular, e depende de disciplina humana.
+
+**Consequências:**
+- ✅ Histórico completo de alterações (auditoria por prompt) — 150+ commits
+- ✅ Rollback possível a qualquer commit anterior
+- ✅ Backup redundante fora do Lovable (reduz lock-in)
+- ✅ Possibilidade futura de colaboração (Fernando/Marcio podem revisar código)
+- ⚠️ Necessidade de manter `.env` fora do repo (mesmo que as chaves atuais
+  sejam todas `anon/public` do Supabase, boa prática). Verificar se `.env` 
+  está no `.gitignore` e criar `.env.example` como template se necessário.
+- ⚠️ Chaves sensíveis (SERVICE_ROLE_KEY, JWT_SECRET) nunca devem ser commitadas
+
+---
+
 ## 📝 Template para próximas decisões
 
 ```
