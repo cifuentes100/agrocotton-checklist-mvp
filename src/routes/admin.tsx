@@ -34,14 +34,25 @@ function DashboardShell({ title }: { title: string }) {
     >
       <h1 className="text-3xl font-bold text-slate-100 sm:text-4xl">{title}</h1>
       <p className="mt-3 text-sm text-slate-400">Em construção.</p>
-      <Button
-        onClick={handleSignOut}
-        variant="outline"
-        className="mt-8 border-2 bg-transparent font-semibold hover:bg-emerald-500/10"
-        style={{ borderColor: "#25D366", color: "#25D366" }}
-      >
-        Sair
-      </Button>
+
+      <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+        <Button
+          onClick={() => navigate({ to: "/implantador/maquinas" })}
+          variant="outline"
+          className="border-2 bg-transparent font-semibold hover:bg-violet-500/10"
+          style={{ borderColor: "#a78bfa", color: "#a78bfa" }}
+        >
+          Modo Implantador
+        </Button>
+        <Button
+          onClick={handleSignOut}
+          variant="outline"
+          className="border-2 bg-transparent font-semibold hover:bg-emerald-500/10"
+          style={{ borderColor: "#25D366", color: "#25D366" }}
+        >
+          Sair
+        </Button>
+      </div>
     </main>
   );
 }
