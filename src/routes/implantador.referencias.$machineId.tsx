@@ -157,6 +157,37 @@ function ReferenciasPage() {
     toast.success("Foto de referência salva.");
   };
 
+  const reloadItems = React.useCallback(async () => {
+    const { data, error } = await supabase
+      .from("checklist_items")
+      .select("id, name, description, order_idx")
+      .order("order_idx", { ascending: true });
+    if (error) {
+      toast.error("Erro ao recarregar itens: " + error.message);
+      return;
+    }
+    setItems((data ?? []) as ChecklistItem[]);
+  }, []);
+
+  const handleMove = async (itemId: number, direction: "up" | "down") => {
+    setMovingItem(itemId);
+    const { error } = await supabase.rpc("move_checklist_item", {
+      _item_id: itemId,
+      _direction: direction,
+    });
+    setMovingItem(null);
+    if (error) {
+      toast.error("Erro ao mover: " + error.message);
+      return;
+    }
+    await reloadItems();
+  };
+
+  const handleEdit = (item: ChecklistItem) => {
+    setEditingItem(item);
+    setEditOpen(true);
+  };
+
   const handleFinalize = async () => {
     setFinalizing(true);
     const { error } = await supabase
@@ -243,7 +274,7 @@ function ReferenciasPage() {
       </div>
 
       <div className="space-y-3">
-        {items.map((item) => (
+        {items.map((item, idx) => (
           <ReferenceItemCard
             key={item.id}
             orderIdx={item.order_idx}
@@ -252,6 +283,13 @@ function ReferenciasPage() {
             photoUrl={signedUrls.get(item.id) ?? null}
             uploading={uploadingItem === item.id}
             onPickFile={(file) => handleUpload(item.id, file)}
+            canEdit={isAdmin}
+            canMoveUp={isAdmin && idx > 0}
+            canMoveDown={isAdmin && idx < items.length - 1}
+            moving={movingItem === item.id}
+            onEdit={() => handleEdit(item)}
+            onMoveUp={() => handleMove(item.id, "up")}
+            onMoveDown={() => handleMove(item.id, "down")}
           />
         ))}
       </div>
