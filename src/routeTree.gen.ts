@@ -19,6 +19,7 @@ import { Route as ImplantadorIndexRouteImport } from './routes/implantador.index
 import { Route as MecanicoHistoricoRouteImport } from './routes/mecanico.historico'
 import { Route as ImplantadorMaquinasRouteImport } from './routes/implantador.maquinas'
 import { Route as ImplantadorReferenciasMachineIdRouteImport } from './routes/implantador.referencias.$machineId'
+import { Route as ApiPublicWhatsappWebhookRouteImport } from './routes/api.public.whatsapp.webhook'
 
 const MecanicoRoute = MecanicoRouteImport.update({
   id: '/mecanico',
@@ -71,6 +72,12 @@ const ImplantadorReferenciasMachineIdRoute =
     path: '/referencias/$machineId',
     getParentRoute: () => ImplantadorRoute,
   } as any)
+const ApiPublicWhatsappWebhookRoute =
+  ApiPublicWhatsappWebhookRouteImport.update({
+    id: '/api/public/whatsapp/webhook',
+    path: '/api/public/whatsapp/webhook',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -83,6 +90,7 @@ export interface FileRoutesByFullPath {
   '/implantador/': typeof ImplantadorIndexRoute
   '/mecanico/': typeof MecanicoIndexRoute
   '/implantador/referencias/$machineId': typeof ImplantadorReferenciasMachineIdRoute
+  '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -93,6 +101,7 @@ export interface FileRoutesByTo {
   '/implantador': typeof ImplantadorIndexRoute
   '/mecanico': typeof MecanicoIndexRoute
   '/implantador/referencias/$machineId': typeof ImplantadorReferenciasMachineIdRoute
+  '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -106,6 +115,7 @@ export interface FileRoutesById {
   '/implantador/': typeof ImplantadorIndexRoute
   '/mecanico/': typeof MecanicoIndexRoute
   '/implantador/referencias/$machineId': typeof ImplantadorReferenciasMachineIdRoute
+  '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -120,6 +130,7 @@ export interface FileRouteTypes {
     | '/implantador/'
     | '/mecanico/'
     | '/implantador/referencias/$machineId'
+    | '/api/public/whatsapp/webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -130,6 +141,7 @@ export interface FileRouteTypes {
     | '/implantador'
     | '/mecanico'
     | '/implantador/referencias/$machineId'
+    | '/api/public/whatsapp/webhook'
   id:
     | '__root__'
     | '/'
@@ -142,6 +154,7 @@ export interface FileRouteTypes {
     | '/implantador/'
     | '/mecanico/'
     | '/implantador/referencias/$machineId'
+    | '/api/public/whatsapp/webhook'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -150,6 +163,7 @@ export interface RootRouteChildren {
   ImplantadorRoute: typeof ImplantadorRouteWithChildren
   LoginRoute: typeof LoginRoute
   MecanicoRoute: typeof MecanicoRouteWithChildren
+  ApiPublicWhatsappWebhookRoute: typeof ApiPublicWhatsappWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -224,6 +238,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ImplantadorReferenciasMachineIdRouteImport
       parentRoute: typeof ImplantadorRoute
     }
+    '/api/public/whatsapp/webhook': {
+      id: '/api/public/whatsapp/webhook'
+      path: '/api/public/whatsapp/webhook'
+      fullPath: '/api/public/whatsapp/webhook'
+      preLoaderRoute: typeof ApiPublicWhatsappWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -263,6 +284,7 @@ const rootRouteChildren: RootRouteChildren = {
   ImplantadorRoute: ImplantadorRouteWithChildren,
   LoginRoute: LoginRoute,
   MecanicoRoute: MecanicoRouteWithChildren,
+  ApiPublicWhatsappWebhookRoute: ApiPublicWhatsappWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
