@@ -96,6 +96,25 @@ Admin vê tudo no backlog
 
 ---
 
+## 🔒 Segurança em verificação (em andamento)
+
+### RLS — Verificação final
+Auditoria completa de Row Level Security em todas as tabelas está em andamento.
+Objetivo: confirmar que o estado atual está coerente com os ADRs (principalmente 
+ADR-008, ADR-010) e classificar os warnings pré-existentes do linter.
+
+**Warnings conhecidos do Supabase Linter** (pré-existentes, não bloqueantes):
+
+| Warning | Gravidade | Status |
+|---|---|---|
+| Security Definer View | 🟢 Intencional | Documentado no ADR-010 (proteção LGPD) |
+| `machine_serials` sem auth adequado | ⚠️ Média | A catalogar em ADR futuro |
+| Leaked Password Protection off | 🟡 Baixa | Feature opcional, a ativar pré-produção |
+| Function Search Path | 🟢 Baixa | Cosmético, não afeta segurança |
+| RLS Enabled No Policy | 🟡 Baixa | Intencional em tabelas bloqueadas por design |
+
+---
+
 ## 🗺️ Próximos passos imediatos
 
 1. Concluir verificação de RLS e catalogar findings (ADR futuro se necessário)
