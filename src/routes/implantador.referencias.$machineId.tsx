@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ReferenceItemCard } from "@/components/implantador/ReferenceItemCard";
 import { EditChecklistItemDialog } from "@/components/implantador/EditChecklistItemDialog";
+import { AddChecklistItemDialog } from "@/components/implantador/AddChecklistItemDialog";
 import { useAuth } from "@/contexts/AuthContext";
-import { ArrowLeft, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/implantador/referencias/$machineId")({
