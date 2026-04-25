@@ -50,6 +50,7 @@ function ReferenciasPage() {
   const [movingItem, setMovingItem] = React.useState<number | null>(null);
   const [editingItem, setEditingItem] = React.useState<ChecklistItem | null>(null);
   const [editOpen, setEditOpen] = React.useState(false);
+  const [addOpen, setAddOpen] = React.useState(false);
 
   const loadAll = React.useCallback(async () => {
     setLoading(true);
