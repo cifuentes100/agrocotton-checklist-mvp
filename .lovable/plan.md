@@ -1,54 +1,50 @@
-## Substituição do item #8: "Esteira RMB" → "Pino do cabeçalho"
+## Substituição do item #9: "Correntes RMB" → "Gracheiro pistão da unidade"
 
-Seguindo o padrão estabelecido nas 7 propagações anteriores desta sessão (Cool Gard, Óleo, Desfribador A, Desfribador B, Gracheiro Mancal, Gracheiro terceiro ponto, Luva de redução).
+Seguindo o padrão estabelecido nas 8 propagações anteriores desta sessão.
 
 ### Mapeamento
 
-- **Posição no catálogo (order_idx):** 8
-- **ID interno (preservado):** 6
-- **Nome atual:** "Esteira RMB"
-- **Nome novo:** "Pino do cabeçalho"
+- **Posição no catálogo (order_idx):** 9
+- **ID interno (preservado):** 7
+- **Nome atual:** "Correntes RMB"
+- **Nome novo:** "Gracheiro pistão da unidade"
 - **Descrição nova:** "Verificar lubrificação"
 
 ### Etapas
 
-**1. Migration SQL (UPDATE em checklist_items)**
+**1. Migration SQL**
 ```sql
 UPDATE public.checklist_items
 SET 
-  name = 'Pino do cabeçalho',
+  name = 'Gracheiro pistão da unidade',
   description = 'Verificar lubrificação'
-WHERE id = 6;
+WHERE id = 7;
 ```
-- `order_idx = 8` permanece intacto (preserva posição no catálogo).
-- ID interno preservado (não há reordenamento, ADR-011 continua válido para histórico).
 
 **2. Asset**
-- Salvar a imagem anexada (com label amarelo "Pino do Cabeçalho") em `src/assets/pino-cabecalho-referencia.jpg`.
+- Salvar a imagem anexada (label amarelo "Pistão da unidade") em `src/assets/gracheiro-pistao-unidade-referencia.jpg`.
 
-**3. Edge Function temporária `seed-pino-cabecalho-photo`**
-- Imagem embutida em base64 dentro do `index.ts`.
+**3. Edge Function temporária `seed-gracheiro-pistao-photo`**
+- Imagem embutida em base64 no `index.ts`.
 - `verify_jwt = false` em `supabase/config.toml` (temporário).
-- Para cada uma das 2 máquinas (`AGR-2026-001` e `AGR-2026-002`):
-  - Upload em `reference-photos/{machine_id}/6.jpg` (upsert).
-  - Upsert em `machine_reference_photos` com `item_id = 6`.
+- Para cada uma das 2 máquinas (`AGR-2026-001`, `AGR-2026-002`):
+  - Upload em `reference-photos/{machine_id}/7.jpg` (upsert).
+  - Upsert em `machine_reference_photos` com `item_id = 7`.
 
 **4. Executar e cleanup**
-- Deploy → curl POST → confirmar `count: 2` na resposta.
-- Delete da Edge Function via tool.
-- Remover diretório local `supabase/functions/seed-pino-cabecalho-photo/`.
-- Reverter `supabase/config.toml` para o estado base (apenas `project_id`).
+- Deploy → POST → confirmar `count: 2`.
+- Delete edge function via tool.
+- Remover diretório local da function.
+- Reverter `supabase/config.toml` para apenas `project_id`.
 - Remover `/tmp/img_b64.txt`.
 
 ### Resultado esperado
 
-- Item #8 do catálogo passa a ser "Pino do cabeçalho / Verificar lubrificação" (id=6 mantido).
-- Foto de referência específica do pino do cabeçalho disponível para as 2 máquinas existentes.
-- Catálogo atual continua com 12 itens, ordem inalterada.
-- Confirmação retornada: quantas máquinas receberam a foto (esperado: 2).
+- Item #9 do catálogo passa a ser "Gracheiro pistão da unidade / Verificar lubrificação" (id=7 mantido, order_idx=9 mantido).
+- Foto de referência específica disponível para as 2 máquinas existentes.
+- Catálogo continua com 12 itens, ordem inalterada.
 
 ### Sem alterações em
 
-- `docs/AGROCOTTON_DECISIONS_LOG.md` (esta substituição se enquadra na evolutividade já coberta por ADR-013).
-- `docs/AGROCOTTON_STATUS.md` (catálogo continua com 12 itens).
+- Docs SDD (substituição coberta por ADR-013).
 - Componentes React (apenas dados mudam).
