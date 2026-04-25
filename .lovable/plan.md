@@ -1,52 +1,51 @@
-# Diagnóstico e correção do webhook WhatsApp
+## Problema
 
-## O que descobrimos agora
+O webhook do WhatsApp já está recebendo as mensagens da uazapi corretamente (confirmado nos logs), mas falha ao gravar no banco com erro 500:
 
-1. Você mandou "oi" do +55 38 9733-8775 e a mensagem chegou no WhatsApp Web do número conectado ✅
-2. **Nenhum log do webhook chegou no nosso servidor** nos últimos minutos ❌
-3. Quando testamos a rota `/api/public/whatsapp/webhook` manualmente, ela retornou **HTTP 302** (redirect, provavelmente para `/login`) — isso é um bug, rotas `/api/public/*` deveriam ser livres de autenticação
-4. Tem um polling chamando `/api/public/diag/env` a cada ~3s retornando 404 (loop ativo em alguma tela aberta — não crítico, mas precisa parar)
+```
+Missing Supabase server environment variables. 
+Ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set.
+```
 
-## O que vamos fazer
+## Causa
 
-### Passo 1 — Confirmar a URL exata salva na uazapi
-Pedir para você abrir o painel da uazapi de novo e me mandar print da configuração do webhook (depois de salvo) para ter 100% de certeza de que:
-- A URL final está correta (sem `/messages` no final, sem espaço, sem barra extra)
-- O "Habilitado" continua ligado
-- Os eventos `messages` e a exclusão `wasSentByApi` continuam lá
+O arquivo `src/integrations/supabase/client.server.ts` lê `process.env.SUPABASE_URL` e `process.env.SUPABASE_SERVICE_ROLE_KEY`. Essas variáveis **não estão configuradas no runtime** do servidor (só aparecem `LOVABLE_API_KEY`, `UAZAPI_HOST`, `UAZAPI_TOKEN`).
 
-### Passo 2 — Investigar o redirect 302 da rota pública
-Verificar o arquivo `src/routes/api.public.whatsapp.webhook.ts` e descobrir por que está redirecionando ao invés de aceitar POST. Possíveis causas:
-- Falta handler `POST` (só tem `GET`)
-- Algum middleware global redirecionando
-- Falta de slash trailing causando redirect
+## Solução
 
-Corrigir o handler para sempre aceitar POST e responder 200 (com log mesmo que o body não bata em nada).
+### Passo 1 — Adicionar a `SUPABASE_SERVICE_ROLE_KEY` como secret do servidor
+Vou disparar o formulário de adição de secret pra você colar a chave. A chave já existe no projeto Supabase — você só precisa pegar e colar.
 
-### Passo 3 — Verificar o token configurado no servidor
-Confirmar via `fetch_secrets` que o `UAZAPI_TOKEN` está setado e checar se o código da rota está validando o token correto enviado pela uazapi (geralmente vem no header `Authorization` ou `token` do request).
+**Onde encontrar a chave:**
+1. Abrir o painel do Supabase do projeto
+2. Ir em **Project Settings → API**
+3. Copiar o valor do campo **service_role** (NÃO o `anon`/`publishable`)
+4. Colar no formulário que vou abrir aqui no Lovable
 
-### Passo 4 — Adicionar logs detalhados no início do handler
-Antes de qualquer validação, logar:
-- método, url completa, headers recebidos (sem expor o token)
-- primeiros caracteres do body
-Isso garante que vamos enxergar QUALQUER tentativa de chamada da uazapi nos logs do servidor.
+### Passo 2 — Adicionar também `SUPABASE_URL` como secret do servidor
+Já tem no `.env`, mas pra garantir que esteja disponível no runtime do worker, vou adicionar como secret também. Valor: `https://ctzajxycetufjkpqhidz.supabase.co`
 
-### Passo 5 — Parar o polling do `/api/public/diag/env`
-Encontrar a página/componente que está fazendo polling e:
-- Confirmar se ainda é necessário
-- Se sim, corrigir para usar o método correto (provavelmente POST ao invés de GET) ou consertar o handler para responder GET
-- Se não, remover o polling
+### Passo 3 — Aguardar redeploy e re-testar
+Depois que você salvar os secrets, o servidor faz redeploy em ~30s. Aí você manda outro "oi" no WhatsApp e:
+- A mensagem deve aparecer gravada na tabela `whatsapp_messages`
+- Você deve receber a resposta automática `🤖 Recebi: «oi»`
 
-### Passo 6 — Re-teste
-Após o deploy das correções, você manda outro "oi" no WhatsApp e verificamos os logs novamente.
+### Passo 4 — Confirmar nos logs
+Vou checar os logs do servidor pra confirmar que:
+- O POST do webhook retornou 200 (não mais 500)
+- A inserção em `whatsapp_messages` foi bem-sucedida
+- O envio da resposta via `/send/text` da uazapi também foi 200
+
+### Passo 5 — Limpeza opcional (depois que tudo funcionar)
+- Remover o arquivo `src/routes/api.public.diag.env.ts` (era só pra diagnóstico)
+
+## Riscos / observações
+
+- A `service_role_key` bypassa RLS — é usada SÓ no servidor, nunca no cliente. Já está sendo usada corretamente apenas em `client.server.ts`.
+- Não há mudança de código nesse plano — só configuração de secrets. O código do webhook está correto.
 
 ## Detalhes técnicos
 
-- Stack: TanStack Start, rota pública em `src/routes/api.public.whatsapp.webhook.ts`
-- Secret `UAZAPI_TOKEN` precisa ser atualizado depois (token novo: `c94fd389-0936-4e3d-b44a-f4a913403ea2`) — vou disparar o formulário de update na fase de implementação
-- Logs do worker disponíveis via tooling — podemos confirmar entrega em tempo real
-
-## O que preciso de você antes de começar
-
-Print da tela do webhook da uazapi **depois de salvo** (com a janela de configuração ainda aberta ou reaberta), para confirmar a URL exata e os eventos marcados. Sem isso, posso corrigir o servidor mas não tenho como saber se a uazapi está realmente apontando pra cá.
+- O cliente admin é instanciado via Proxy lazy em `client.server.ts`, então a primeira chamada no webhook dispara a leitura de `process.env`. Sem as vars, ele lança o erro que vimos.
+- Adicionar via tool `secrets--add_secret` no Lovable disponibiliza as vars como `process.env.*` no runtime do worker TanStack.
+- O webhook (`src/routes/api.public.whatsapp.webhook.ts`) já está correto: tem POST handler, logs detalhados, parsing flexível do payload da uazapi e echo bot funcionando.
