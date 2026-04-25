@@ -308,6 +308,13 @@ function ReferenciasPage() {
           </Button>
         </div>
       )}
+
+      <EditChecklistItemDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        item={editingItem}
+        onSaved={reloadItems}
+      />
     </div>
   );
 }
