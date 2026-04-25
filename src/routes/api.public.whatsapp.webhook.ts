@@ -104,20 +104,48 @@ async function sendUazapiText(phone: string, text: string) {
 export const Route = createFileRoute("/api/public/whatsapp/webhook")({
   server: {
     handlers: {
-      GET: async () => {
-        // Health-check simples
+      GET: async ({ request }) => {
+        // Health-check + diagnóstico de chamadas
+        const url = new URL(request.url);
+        console.log(
+          `[whatsapp/webhook] GET ${url.pathname}${url.search} ` +
+            `headers=${JSON.stringify(headerSummary(request.headers))}`,
+        );
         return Response.json({
           ok: true,
           service: "whatsapp-webhook",
+          method: "GET",
           configured: Boolean(process.env.UAZAPI_HOST && process.env.UAZAPI_TOKEN),
+          hint: "POST aqui o payload da uazapi",
+        });
+      },
+      OPTIONS: async () => {
+        // Suporte a preflight CORS, caso a uazapi faça
+        return new Response(null, {
+          status: 204,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, token",
+          },
         });
       },
       POST: async ({ request }) => {
+        // LOG GROSSO no topo: garante que enxergamos QUALQUER chamada da uazapi
+        const reqUrl = new URL(request.url);
+        const rawBody = await request.text();
+        console.log(
+          `[whatsapp/webhook] POST ${reqUrl.pathname} ` +
+            `headers=${JSON.stringify(headerSummary(request.headers))} ` +
+            `bodyLen=${rawBody.length} bodyPreview=${rawBody.slice(0, 500)}`,
+        );
+
         try {
           let payload: UazapiInbound;
           try {
-            payload = await request.json();
+            payload = rawBody ? JSON.parse(rawBody) : ({} as UazapiInbound);
           } catch {
+            console.error("[whatsapp/webhook] Invalid JSON body");
             return new Response("Invalid JSON", { status: 400 });
           }
 
