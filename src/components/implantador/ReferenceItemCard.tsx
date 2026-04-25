@@ -42,9 +42,9 @@ export function ReferenceItemCard({
   };
 
   return (
-    <div className="flex gap-4 rounded-lg border border-slate-800 bg-slate-900/60 p-4">
+    <div className="flex gap-3 rounded-lg border border-slate-800 bg-slate-900/60 p-3 sm:gap-4 sm:p-4">
       {/* Thumbnail */}
-      <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-700 bg-slate-950">
+      <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-700 bg-slate-950 sm:h-24 sm:w-24">
         {photoUrl ? (
           <img
             src={photoUrl}
@@ -57,16 +57,19 @@ export function ReferenceItemCard({
       </div>
 
       {/* Conteúdo */}
-      <div className="flex flex-1 flex-col">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-baseline gap-2">
-            <span className="text-sm font-bold" style={{ color: "#a78bfa" }}>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-baseline gap-2">
+            <span
+              className="shrink-0 text-sm font-bold"
+              style={{ color: "#a78bfa" }}
+            >
               #{orderIdx}
             </span>
-            <h3 className="font-semibold text-slate-100">{name}</h3>
+            <h3 className="break-words font-semibold text-slate-100">{name}</h3>
           </div>
           {canEdit && (
-            <div className="flex shrink-0 items-center gap-1">
+            <div className="flex shrink-0 items-center justify-end gap-1 sm:justify-start">
               <Button
                 type="button"
                 size="icon"
@@ -104,7 +107,7 @@ export function ReferenceItemCard({
           )}
         </div>
         {description && (
-          <p className="mt-1 text-sm text-slate-400">{description}</p>
+          <p className="mt-1 break-words text-sm text-slate-400">{description}</p>
         )}
 
         <div className="mt-3">
@@ -124,8 +127,8 @@ export function ReferenceItemCard({
             variant={photoUrl ? "outline" : "default"}
             className={
               photoUrl
-                ? "border-2 bg-transparent font-medium hover:bg-violet-500/10"
-                : "font-semibold text-slate-900 hover:opacity-90"
+                ? "w-full border-2 bg-transparent font-medium hover:bg-violet-500/10 sm:w-auto"
+                : "w-full font-semibold text-slate-900 hover:opacity-90 sm:w-auto"
             }
             style={
               photoUrl
@@ -143,7 +146,10 @@ export function ReferenceItemCard({
             ) : (
               <>
                 <Camera className="mr-1 h-4 w-4" />
-                Adicionar foto do padrão correto
+                <span className="sm:hidden">Adicionar foto</span>
+                <span className="hidden sm:inline">
+                  Adicionar foto do padrão correto
+                </span>
               </>
             )}
           </Button>

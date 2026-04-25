@@ -61,7 +61,7 @@ export function EditChecklistItemDialog({ open, onOpenChange, item, onSaved }: P
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-slate-800 bg-slate-900 text-slate-100">
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-md border-slate-800 bg-slate-900 text-slate-100 sm:w-full">
         <DialogHeader>
           <DialogTitle>Editar item do checklist</DialogTitle>
           <DialogDescription className="text-slate-400">
