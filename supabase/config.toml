@@ -1,4 +1,1 @@
 project_id = "ctzajxycetufjkpqhidz"
-
-[functions.seed-pino-cabecalho-photo]
-verify_jwt = false
