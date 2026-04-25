@@ -113,49 +113,64 @@ export const Route = createFileRoute("/api/public/whatsapp/webhook")({
         });
       },
       POST: async ({ request }) => {
-        let payload: UazapiInbound;
         try {
-          payload = await request.json();
-        } catch {
-          return new Response("Invalid JSON", { status: 400 });
+          let payload: UazapiInbound;
+          try {
+            payload = await request.json();
+          } catch {
+            return new Response("Invalid JSON", { status: 400 });
+          }
+
+          const parsed = extractMessage(payload);
+
+          // Loga o evento (mesmo que não tenhamos extraído nada útil)
+          const db = supabaseAdmin as any;
+          const { error: logErr } = await db.from("whatsapp_messages").insert({
+            direction: "inbound",
+            phone: parsed?.phone ?? "unknown",
+            message_type: parsed?.messageType ?? "unknown",
+            body: parsed?.text ?? null,
+            external_id: parsed?.externalId ?? null,
+            raw_payload: payload,
+            status: parsed ? "received" : "unparsed",
+          });
+          if (logErr) {
+            console.error("[whatsapp/webhook] insert inbound failed:", logErr);
+          }
+
+          // Ignora mensagens enviadas pela própria API
+          if (!parsed || parsed.fromMe || !parsed.phone) {
+            return Response.json({ ok: true, ignored: true });
+          }
+
+          // Echo bot
+          const replyText = parsed.text
+            ? `🤖 Recebi: «${parsed.text}»`
+            : `🤖 Recebi uma mensagem do tipo "${parsed.messageType}". Por enquanto só respondo texto.`;
+
+          const send = await sendUazapiText(parsed.phone, replyText);
+
+          await db.from("whatsapp_messages").insert({
+            direction: "outbound",
+            phone: parsed.phone,
+            message_type: "text",
+            body: replyText,
+            status: send.ok ? "sent" : "failed",
+            error: send.ok ? null : send.error,
+            raw_payload: send.ok ? null : { error: send.error },
+          });
+
+          return Response.json({ ok: true, replied: send.ok });
+        } catch (err) {
+          console.error("[whatsapp/webhook] handler exception:", err);
+          return Response.json(
+            {
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            },
+            { status: 500 },
+          );
         }
-
-        const parsed = extractMessage(payload);
-
-        // Loga o evento (mesmo que não tenhamos extraído nada útil)
-        await supabaseAdmin.from("whatsapp_messages").insert({
-          direction: "inbound",
-          phone: parsed?.phone ?? "unknown",
-          message_type: parsed?.messageType ?? "unknown",
-          body: parsed?.text ?? null,
-          external_id: parsed?.externalId ?? null,
-          raw_payload: payload as any,
-          status: parsed ? "received" : "unparsed",
-        });
-
-        // Ignora mensagens enviadas pela própria API
-        if (!parsed || parsed.fromMe || !parsed.phone) {
-          return Response.json({ ok: true, ignored: true });
-        }
-
-        // Echo bot
-        const replyText = parsed.text
-          ? `🤖 Recebi: «${parsed.text}»`
-          : `🤖 Recebi uma mensagem do tipo "${parsed.messageType}". Por enquanto só respondo texto.`;
-
-        const send = await sendUazapiText(parsed.phone, replyText);
-
-        await supabaseAdmin.from("whatsapp_messages").insert({
-          direction: "outbound",
-          phone: parsed.phone,
-          message_type: "text",
-          body: replyText,
-          status: send.ok ? "sent" : "failed",
-          error: send.ok ? null : send.error,
-          raw_payload: send.ok ? null : { error: send.error },
-        });
-
-        return Response.json({ ok: true, replied: send.ok });
       },
     },
   },
