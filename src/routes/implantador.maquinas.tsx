@@ -198,15 +198,8 @@ function MaquinasPage() {
         onOpenChange={setCloneOpen}
         sourceMachine={cloneSource}
         totalItemsCount={totalItemsCount}
-        onCloned={(newId) => {
+        onCloned={() => {
           load();
-          // Se clonou sem fotos, leva direto pra configurar; se clonou com fotos, fica na lista
-          const clonedReady =
-            machines.find((mm) => mm.id === newId)?.status ?? null;
-          if (clonedReady !== "ready") {
-            // recarrega e deixa o usuário decidir
-          }
-          // pequeno delay opcional para o load aparecer
         }}
       />
     </div>
