@@ -24,7 +24,7 @@ export type Database = {
         }
         Insert: {
           description?: string | null
-          id: number
+          id?: number
           name: string
           order_idx: number
           reference_correct_path?: string | null
@@ -412,6 +412,10 @@ export type Database = {
       }
     }
     Functions: {
+      add_checklist_item: {
+        Args: { _description: string; _name: string }
+        Returns: number
+      }
       current_role: { Args: never; Returns: string }
       move_checklist_item: {
         Args: { _direction: string; _item_id: number }

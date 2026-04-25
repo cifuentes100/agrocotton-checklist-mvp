@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ReferenceItemCard } from "@/components/implantador/ReferenceItemCard";
 import { EditChecklistItemDialog } from "@/components/implantador/EditChecklistItemDialog";
+import { AddChecklistItemDialog } from "@/components/implantador/AddChecklistItemDialog";
 import { useAuth } from "@/contexts/AuthContext";
-import { ArrowLeft, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/implantador/referencias/$machineId")({
@@ -49,6 +50,7 @@ function ReferenciasPage() {
   const [movingItem, setMovingItem] = React.useState<number | null>(null);
   const [editingItem, setEditingItem] = React.useState<ChecklistItem | null>(null);
   const [editOpen, setEditOpen] = React.useState(false);
+  const [addOpen, setAddOpen] = React.useState(false);
 
   const loadAll = React.useCallback(async () => {
     setLoading(true);
@@ -294,6 +296,21 @@ function ReferenciasPage() {
         ))}
       </div>
 
+      {isAdmin && (
+        <div className="mt-4 flex justify-center">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setAddOpen(true)}
+            className="border-dashed bg-transparent font-medium hover:bg-violet-500/10"
+            style={{ borderColor: "#a78bfa", color: "#a78bfa" }}
+          >
+            <Plus className="mr-1 h-4 w-4" />
+            Adicionar item ao checklist
+          </Button>
+        </div>
+      )}
+
       {allConfigured && (
         <div className="mt-8 flex justify-end">
           <Button
@@ -314,6 +331,12 @@ function ReferenciasPage() {
         onOpenChange={setEditOpen}
         item={editingItem}
         onSaved={reloadItems}
+      />
+
+      <AddChecklistItemDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        onAdded={reloadItems}
       />
     </div>
   );
