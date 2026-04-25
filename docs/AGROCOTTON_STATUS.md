@@ -4,8 +4,8 @@
 > fonte de verdade sobre onde estamos. Decisões arquiteturais ficam em
 > `AGROCOTTON_DECISIONS_LOG.md`.
 
-**Última atualização:** 2026-04-24
-**Fase atual:** Calibragem do catálogo de checklist + preparação para Dashboard Admin
+**Última atualização:** 2026-04-25
+**Fase atual:** Segurança e versionamento — verificação final de RLS antes do Dashboard Admin
 **Próximo marco:** Admin com backlog + dashboard + CRUD
 
 > **Nota (ADR-011):** o checklist agora tem **11 itens**, não 10. O novo #1 é
@@ -70,6 +70,9 @@ Admin vê tudo no backlog
 - [x] Projeto Lovable criado (`AgroCotton Checklist MVP`)
 - [x] Integração Lovable ↔ Supabase autorizada e funcionando
 - [x] Landing page inicial renderizando
+- [x] Repositório GitHub conectado (privado: `cifuentes100/agrocotton-checklist-mvp`)
+- [x] Sincronização automática Lovable ↔ GitHub (150+ commits do lovable-dev[bot])
+- [x] Backup versionado do código-fonte estabelecido
 
 ### Aplicação Web (Lovable)
 - [x] Autenticação por email/senha para mecânico/admin/implantador
@@ -93,14 +96,31 @@ Admin vê tudo no backlog
 
 ---
 
+## 🔒 Segurança em verificação (em andamento)
+
+### RLS — Verificação final
+Auditoria completa de Row Level Security em todas as tabelas está em andamento.
+Objetivo: confirmar que o estado atual está coerente com os ADRs (principalmente 
+ADR-008, ADR-010) e classificar os warnings pré-existentes do linter.
+
+**Warnings conhecidos do Supabase Linter** (pré-existentes, não bloqueantes):
+
+| Warning | Gravidade | Status |
+|---|---|---|
+| Security Definer View | 🟢 Intencional | Documentado no ADR-010 (proteção LGPD) |
+| `machine_serials` sem auth adequado | ⚠️ Média | A catalogar em ADR futuro |
+| Leaked Password Protection off | 🟡 Baixa | Feature opcional, a ativar pré-produção |
+| Function Search Path | 🟢 Baixa | Cosmético, não afeta segurança |
+| RLS Enabled No Policy | 🟡 Baixa | Intencional em tabelas bloqueadas por design |
+
+---
+
 ## 🗺️ Próximos passos imediatos
 
-1. ~~Calibragem do catálogo de checklist (12 itens validados)~~ ✅ 24/04/2026
-2. ~~Reset de dados de teste semanticamente quebrados~~ ✅ 24/04/2026
-3. Catalogar 8 warnings do linter Supabase (ADR-011 futuro)
-4. Construir Dashboard Admin (adaptado aos 12 itens do catálogo atual)
-5. Decidir ADR-003 (provider WhatsApp)
-6. Construir Bot WhatsApp
+1. Concluir verificação de RLS e catalogar findings (ADR futuro se necessário)
+2. Construir Dashboard Admin (RF-35: contador de lubrificação + relatórios + CRUD usuários)
+3. Decidir ADR-003 (provider WhatsApp: uazapi vs Cloud API)
+4. Construir Bot WhatsApp (após ADR-003 resolvido)
 
 ---
 
