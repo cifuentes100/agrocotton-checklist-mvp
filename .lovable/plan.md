@@ -1,93 +1,52 @@
-## Objetivo
+# Diagnóstico e correção do webhook WhatsApp
 
-Validar end-to-end o **echo bot do WhatsApp** que já está implementado no código, usando a instância real `ExfblC` da uazapi (`https://free.uazapi.com`). Sem código novo — só configuração de secrets, registro do webhook na uazapi e teste real enviando mensagem de um celular.
+## O que descobrimos agora
 
-## Estado atual (já pronto no código)
+1. Você mandou "oi" do +55 38 9733-8775 e a mensagem chegou no WhatsApp Web do número conectado ✅
+2. **Nenhum log do webhook chegou no nosso servidor** nos últimos minutos ❌
+3. Quando testamos a rota `/api/public/whatsapp/webhook` manualmente, ela retornou **HTTP 302** (redirect, provavelmente para `/login`) — isso é um bug, rotas `/api/public/*` deveriam ser livres de autenticação
+4. Tem um polling chamando `/api/public/diag/env` a cada ~3s retornando 404 (loop ativo em alguma tela aberta — não crítico, mas precisa parar)
 
-- Webhook público: `src/routes/api.public.whatsapp.webhook.ts`
-  - `GET` → health-check (retorna `{ok, configured}`).
-  - `POST` → recebe mensagem da uazapi, loga em `whatsapp_messages`, ignora `fromMe`, e responde `🤖 Recebi: «texto»` via `POST /send/text` da uazapi.
-- Tabela `whatsapp_messages` com RLS (admin lê tudo).
-- Secrets `UAZAPI_HOST` e `UAZAPI_TOKEN` já existem no Supabase, mas com valores antigos/placeholder — vamos sobrescrever.
+## O que vamos fazer
 
-## O que será feito
+### Passo 1 — Confirmar a URL exata salva na uazapi
+Pedir para você abrir o painel da uazapi de novo e me mandar print da configuração do webhook (depois de salvo) para ter 100% de certeza de que:
+- A URL final está correta (sem `/messages` no final, sem espaço, sem barra extra)
+- O "Habilitado" continua ligado
+- Os eventos `messages` e a exclusão `wasSentByApi` continuam lá
 
-### 1. Atualizar os dois secrets do Supabase
+### Passo 2 — Investigar o redirect 302 da rota pública
+Verificar o arquivo `src/routes/api.public.whatsapp.webhook.ts` e descobrir por que está redirecionando ao invés de aceitar POST. Possíveis causas:
+- Falta handler `POST` (só tem `GET`)
+- Algum middleware global redirecionando
+- Falta de slash trailing causando redirect
 
-- `UAZAPI_HOST` = `https://free.uazapi.com`
-- `UAZAPI_TOKEN` = `0e4ee35f-61c7-40f4-a4b6-35a8725bcb9d` (token da instância `ExfblC`)
+Corrigir o handler para sempre aceitar POST e responder 200 (com log mesmo que o body não bata em nada).
 
-Faço isso com a ferramenta de secrets do Lovable. Não vai pro código nem pro `.env` do repositório.
+### Passo 3 — Verificar o token configurado no servidor
+Confirmar via `fetch_secrets` que o `UAZAPI_TOKEN` está setado e checar se o código da rota está validando o token correto enviado pela uazapi (geralmente vem no header `Authorization` ou `token` do request).
 
-### 2. Verificar o endpoint de webhook está acessível
+### Passo 4 — Adicionar logs detalhados no início do handler
+Antes de qualquer validação, logar:
+- método, url completa, headers recebidos (sem expor o token)
+- primeiros caracteres do body
+Isso garante que vamos enxergar QUALQUER tentativa de chamada da uazapi nos logs do servidor.
 
-Chamar `GET https://<preview-url>/api/public/whatsapp/webhook` e conferir que responde:
-```json
-{ "ok": true, "service": "whatsapp-webhook", "configured": true }
-```
+### Passo 5 — Parar o polling do `/api/public/diag/env`
+Encontrar a página/componente que está fazendo polling e:
+- Confirmar se ainda é necessário
+- Se sim, corrigir para usar o método correto (provavelmente POST ao invés de GET) ou consertar o handler para responder GET
+- Se não, remover o polling
 
-`configured: true` confirma que os secrets estão visíveis para o servidor.
-
-### 3. Simular um POST de inbound (smoke test sem precisar do celular)
-
-Mando um POST de teste pro nosso webhook com payload imitando a uazapi:
-```json
-{
-  "event": "messages",
-  "message": {
-    "fromMe": false,
-    "sender": "5564999999999@s.whatsapp.net",
-    "text": "ping de teste",
-    "id": "test-msg-001",
-    "type": "text"
-  }
-}
-```
-
-Esperado:
-- Response `{ ok: true, replied: true/false }`.
-- Linha inbound em `whatsapp_messages` com `body = "ping de teste"`.
-- Linha outbound com `body = "🤖 Recebi: «ping de teste»"` e `status = sent` (se a uazapi aceitou) ou `failed` (se número 5564999... não existe — esperado, esse é fake).
-
-Se o outbound falhar com erro tipo "número não encontrado", ótimo: prova que a autenticação na uazapi está OK.
-
-### 4. Você configura o webhook na uazapi
-
-Na painel da uazapi, na instância `ExfblC`, registrar webhook:
-- **URL:** `https://<preview-url-do-projeto>/api/public/whatsapp/webhook`
-- **Events:** `messages`
-- **excludeMessages:** `wasSentByApi` (evita loop infinito do bot respondendo a si mesmo)
-
-Te passo a URL exata no momento da execução.
-
-### 5. Teste real
-
-Você manda um `oi` do seu celular pro número conectado na instância `ExfblC`. O bot deve responder `🤖 Recebi: «oi»` em segundos. Conferimos:
-- Logs do servidor (via `server-function-logs`).
-- Linhas inbound + outbound em `whatsapp_messages`.
+### Passo 6 — Re-teste
+Após o deploy das correções, você manda outro "oi" no WhatsApp e verificamos os logs novamente.
 
 ## Detalhes técnicos
 
-**Por que o token da instância e não o admin token:** o endpoint `/send/text` da uazapi autentica por instância (header `token: <instance-token>`). O admin token serve só pra criar/listar instâncias via `/instance/*`, que não usamos.
+- Stack: TanStack Start, rota pública em `src/routes/api.public.whatsapp.webhook.ts`
+- Secret `UAZAPI_TOKEN` precisa ser atualizado depois (token novo: `c94fd389-0936-4e3d-b44a-f4a913403ea2`) — vou disparar o formulário de update na fase de implementação
+- Logs do worker disponíveis via tooling — podemos confirmar entrega em tempo real
 
-**Por que `excludeMessages: wasSentByApi`:** sem isso, toda resposta do bot voltaria como inbound (porque a própria uazapi notifica mensagens enviadas), gerando loop. O nosso webhook já tem proteção via `parsed.fromMe`, mas filtrar na origem é mais barato.
+## O que preciso de você antes de começar
 
-**RLS de `whatsapp_messages`:** só admin lê via cliente autenticado. Para inspecionar durante o teste vou usar `supabase--read_query` (bypassa RLS).
-
-**Segurança lembrete:** depois do teste, gerar token novo na uazapi e atualizar `UAZAPI_TOKEN` — o atual foi exposto no chat.
-
-## Fora do escopo desta tarefa
-
-- Identificação do operador (cruzar phone com `users` table).
-- Máquina de estado da conversa (escolher máquina, pedir foto item por item, criar `checklist_runs` / `item_responses`).
-- Recebimento e armazenamento de fotos vindas do WhatsApp no bucket `checklist-photos`.
-- Validação de assinatura HMAC do webhook (a uazapi não envia assinatura nativa; cobertura via secret no path se quisermos depois).
-
-Tudo isso fica para sessões seguintes — entram como ADRs/RFs separados quando você decidir avançar pro fluxo completo.
-
-## Critérios de aceite
-
-- `GET /api/public/whatsapp/webhook` retorna `configured: true`.
-- POST simulado cria registros inbound + outbound em `whatsapp_messages`.
-- Mensagem real do celular faz o bot responder `🤖 Recebi: «...»` em ≤ 5s.
-- Nenhum loop de mensagens (bot respondendo a si mesmo).
+Print da tela do webhook da uazapi **depois de salvo** (com a janela de configuração ainda aberta ou reaberta), para confirmar a URL exata e os eventos marcados. Sem isso, posso corrigir o servidor mas não tenho como saber se a uazapi está realmente apontando pra cá.
