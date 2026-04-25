@@ -1,88 +1,52 @@
-## Catálogo do checklist editável pelo admin durante implantação
+# Adicionar novos itens ao checklist (admin)
 
-Implementa parcialmente ADR-015 ("Catálogo gerenciável via UI") em formato simplificado, restrito ao admin, justificado pela fase atual de implantação (catálogo ainda em calibragem). Adiciona também a possibilidade do admin acessar o painel do implantador para liberar o trabalho dele quando necessário.
+Hoje o checklist tem 12 itens fixos. O admin já pode editar nome/descrição e reordenar, mas não pode **criar** itens novos. Este plano libera essa criação a partir da tela `/implantador/referencias/:machineId`.
 
-### Parte 1 — Admin acessa painel do implantador
+## O que muda na experiência
 
-**Como funciona hoje:** rota `/implantador/*` aceita roles `["implantador", "admin"]` (já configurado em `ProtectedRoute`). O admin já consegue entrar — mas não há link visível do painel admin para o painel implantador.
+- Na página de configurar referências, quando o usuário tem papel `admin`, aparece um botão **“+ Adicionar item”** abaixo da lista.
+- Clicar abre um modal com campos **Nome** (obrigatório) e **Descrição** (opcional).
+- Ao salvar, o novo item entra no fim da lista (próximo `order_idx`) e fica imediatamente disponível para foto de referência e para futuros checklists.
+- Apenas `admin` vê o botão; `implantador` puro continua só configurando fotos dos itens existentes.
 
-**Mudança:** adicionar no topbar/sidebar do `/admin` um botão "Modo Implantador" que navega para `/implantador/maquinas`. E recíproco no `/implantador` (apenas se role=admin): botão "Voltar para Admin" que navega para `/admin`. Isso evita digitar URL na mão.
+## Mudanças no banco
 
-### Parte 2 — Edição inline do catálogo na página de configuração
+Hoje a tabela `public.checklist_items` permite somente SELECT (todos autenticados) e UPDATE (admin). Falta INSERT.
 
-Local: `src/routes/implantador.referencias.$machineId.tsx` (página onde o admin/implantador já vê os 12 itens lado a lado com as fotos de referência). É o lugar natural — o catálogo é visualizado ali, então edição direta no card é a UX mais direta.
+Migration:
 
-**Cada `ReferenceItemCard` ganha (apenas se role=admin):**
-- **Botão lápis** (ícone `Pencil` do lucide) ao lado do nome → abre modal/dialog com dois campos: nome e descrição. Botões: Cancelar / Salvar.
-- **Setas ↑ ↓** (ícones `ChevronUp` / `ChevronDown`) para mover o item para cima/baixo no catálogo. Seta ↑ desabilitada no primeiro item; ↓ desabilitada no último.
+1. Garantir que `id` seja gerado automaticamente. Hoje `id` é `integer NOT NULL` sem default — vamos criar uma `SEQUENCE` (se não existir) e definir `DEFAULT nextval(...)` para que novos inserts não precisem informar `id` manualmente.
+2. Criar policy `INSERT` em `checklist_items` restrita a `current_role() = 'admin'`.
+3. Criar RPC `public.add_checklist_item(_name text, _description text)` com `SECURITY DEFINER`:
+   - Valida que `current_role() = 'admin'`.
+   - Calcula `next_order = coalesce(max(order_idx), 0) + 1`.
+   - Insere `(name, description, order_idx)` e retorna o `id` criado.
 
-Implantador continua vendo a página normalmente sem esses controles (somente leitura do catálogo + upload de foto). Decisão deliberada: durante implantação só o admin (Patricia) ajusta o catálogo; implantadores são gente de campo e não devem mexer na estrutura.
+Usar RPC garante que o cálculo de `order_idx` é atômico e evita corrida com a unique-like ordenação atual.
 
-### Parte 3 — Backend: permitir UPDATE em checklist_items
+## Mudanças no frontend
 
-Hoje a tabela `checklist_items` tem RLS só com SELECT para autenticados. Para edição funcionar:
+**Novo componente** `src/components/implantador/AddChecklistItemDialog.tsx`
+- Modal com inputs Nome/Descrição (mesmo visual do `EditChecklistItemDialog`).
+- Chama `supabase.rpc('add_checklist_item', { _name, _description })`.
+- Em sucesso: toast + callback `onAdded` para recarregar a lista.
 
-**Migration:**
-1. Adicionar policy `UPDATE` em `checklist_items` permitindo apenas `current_role() = 'admin'`.
-2. Remover trigger `prevent_order_idx_change` que hoje bloqueia QUALQUER mudança de `order_idx` (RF-31 estrita). Substituir por uma versão que **só dispara em runtime contra item_responses** — ou seja, manter a invariante "operador não pula ordem" sem impedir reordenamento administrativo do catálogo. Isso já está alinhado com ADR-013 ("imutabilidade em runtime, evolutividade em migrations") — esta mudança extende "evolutividade em migrations" para "evolutividade via UI admin".
+**`src/routes/implantador.referencias.$machineId.tsx`**
+- Estado `addOpen`.
+- Quando `isAdmin`, renderiza um botão “+ Adicionar item” abaixo do `space-y-3` da lista.
+- `onAdded` chama `reloadItems()` (que já existe).
 
-**Algoritmo de reorder (cliente, dentro de uma transação RPC ou sequência de updates):**
-- `move_up(item_id)`: troca `order_idx` desse item com o do item imediatamente acima. Como há `UNIQUE` implícito? Verifico no schema: não há unique constraint em order_idx, mas ainda assim a troca direta pode violar a sanidade. Fazer em 3 passos: item A vai pra `-1` (temporário), item B recebe o order_idx antigo de A, item A recebe o order_idx antigo de B. Encapsular numa **função RPC** `move_checklist_item(item_id, direction)` em SQL para atomicidade.
+Sem mudanças em `EditChecklistItemDialog`, `ReferenceItemCard`, RPC `move_checklist_item`, ou nas telas de mecânico/operador — eles leem `checklist_items` dinamicamente e absorvem o novo item automaticamente.
 
-### Parte 4 — Documentação
+## Riscos / observações
 
-Adicionar **ADR-016** ao `docs/AGROCOTTON_DECISIONS_LOG.md`:
-- Título: "Edição admin do catálogo via UI durante implantação (versão mínima de ADR-015)"
-- Status: Aceita e implementada
-- Relaciona-se com: ADR-013, ADR-015
-- Justifica que a versão entregue é mínima (rename + reorder por admin), sem soft delete, sem audit log, sem state machine — ADR-015 permanece como referência da versão completa pós-MVP alfa.
+- Itens novos não terão foto de referência cadastrada para máquinas existentes; o card já trata `photoUrl = null` mostrando o ícone de câmera, então o fluxo continua válido.
+- Não há DELETE de itens neste plano (pediram só “adicionar além dos 12”). Se mais tarde quiser excluir/desativar item, fazemos em iteração separada (precisa decidir o que acontece com `item_responses` históricos — provavelmente soft-delete via coluna `archived`).
+- A página `/mecanico/historico` e `/mecanico/index` continuam funcionando porque consultam `checklist_items` por `id`/ordem dinamicamente.
 
-Atualizar `docs/AGROCOTTON_STATUS.md` na seção "Próximos passos" marcando que parte de ADR-015 foi entregue.
+## Resumo dos arquivos
 
----
-
-### Detalhes técnicos
-
-**Arquivos novos:**
-- (nenhum) — toda mudança em arquivos existentes.
-
-**Arquivos modificados:**
-
-1. **Migration SQL (Supabase):**
-   - `CREATE POLICY "admin atualiza checklist_items" ON public.checklist_items FOR UPDATE TO authenticated USING (public.current_role() = 'admin') WITH CHECK (public.current_role() = 'admin');`
-   - `DROP TRIGGER IF EXISTS ...` no trigger `prevent_order_idx_change` (e/ou drop da função se não usada). Manter `enforce_item_order` (esse atua em `item_responses` e protege runtime).
-   - `CREATE OR REPLACE FUNCTION public.move_checklist_item(_item_id int, _direction text) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$ ... $$;` que valida role=admin, encontra vizinho na direção, faz swap atômico via order_idx temporário negativo.
-   - `GRANT EXECUTE ON FUNCTION public.move_checklist_item(int, text) TO authenticated;`
-
-2. **`src/components/implantador/ReferenceItemCard.tsx`:**
-   - Adicionar props opcionais `canEdit: boolean`, `canMoveUp: boolean`, `canMoveDown: boolean`, `onEdit()`, `onMoveUp()`, `onMoveDown()`.
-   - Renderizar botões lápis + ↑ ↓ (`Pencil`, `ChevronUp`, `ChevronDown`) ao lado do nome quando `canEdit` for true.
-
-3. **`src/components/implantador/EditChecklistItemDialog.tsx` (novo):**
-   - Dialog com Input (nome) + Textarea (descrição). Salva via `supabase.from("checklist_items").update(...)`.
-
-4. **`src/routes/implantador.referencias.$machineId.tsx`:**
-   - Importar `useAuth` para detectar role.
-   - Para admin: passar `canEdit/canMoveUp/canMoveDown` + handlers para o Card.
-   - `handleEdit(item)`: abre dialog.
-   - `handleMove(item, direction)`: chama `supabase.rpc("move_checklist_item", { _item_id, _direction })` e recarrega lista.
-
-5. **`src/routes/admin.tsx` (ou layout admin):**
-   - Botão "Modo Implantador" no topbar.
-
-6. **`src/routes/implantador.tsx`:**
-   - Quando `role === "admin"`, mostrar botão "Voltar para Admin" no topbar.
-
-7. **`docs/AGROCOTTON_DECISIONS_LOG.md`:**
-   - Adicionar ADR-016 (antes do template de "próximas decisões", se houver).
-
-8. **`docs/AGROCOTTON_STATUS.md`:**
-   - Atualizar item "Próximos passos" referenciando ADR-016.
-
-### O que NÃO é feito agora
-
-- Soft delete de itens (item.active boolean) — fica para ADR-015 pós-MVP.
-- Adicionar/remover itens via UI (só rename + reorder por enquanto).
-- Audit log de mudanças.
-- State machine `editable / frozen / maintenance`.
-- Permitir implantador editar (continua só admin).
+- **Migration nova** (`supabase/migrations/...add_checklist_items_insert.sql`)
+- **Novo**: `src/components/implantador/AddChecklistItemDialog.tsx`
+- **Editar**: `src/routes/implantador.referencias.$machineId.tsx`
+- **Editar**: `docs/AGROCOTTON_DECISIONS_LOG.md` (ADR-017)
