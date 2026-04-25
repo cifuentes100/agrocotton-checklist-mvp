@@ -1,1 +1,4 @@
 project_id = "ctzajxycetufjkpqhidz"
+
+[functions.seed-gracheiro-pistao-photo]
+verify_jwt = false
