@@ -471,15 +471,13 @@ export async function handleBotMessage(
     }
 
     const next = items[newCompletedCount];
-    await sendWhatsAppMessage(
+    await sendWhatsAppMessage(fromPhone, `✅ Foto recebida.`);
+    await sendItemQuestion(
       fromPhone,
-      `✅ Foto recebida.\n\n` +
-        formatQuestion(
-          newCompletedCount + 1,
-          total,
-          next.name,
-          next.description,
-        ),
+      run.machine_id,
+      newCompletedCount + 1,
+      total,
+      next,
     );
     return "bot:next_question";
   }
