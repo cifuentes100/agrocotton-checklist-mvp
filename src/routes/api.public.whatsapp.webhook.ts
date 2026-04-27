@@ -68,6 +68,15 @@ function headerSummary(headers: Headers): Record<string, string> {
 }
 
 /**
+ * Mascara o valor do query param `token` em uma URL (?token=...&...)
+ * para não vazá-lo em logs.
+ */
+function maskTokenInSearch(search: string): string {
+  if (!search) return search;
+  return search.replace(/([?&]token=)[^&]*/gi, "$1<masked>");
+}
+
+/**
  * Envia mensagem de texto via whapi.cloud.
  *   POST https://gate.whapi.cloud/messages/text
  *   Headers: Authorization: Bearer <WHAPI_TOKEN>
