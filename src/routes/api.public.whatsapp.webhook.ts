@@ -5,13 +5,16 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
  * Webhook público da whapi.cloud (canal DEADPL-Y5ZLU, +55 61 99814 6922).
  *
  * Configurar no painel whapi.cloud (Settings → Webhooks):
- *   URL:    https://agrocheck-hub.lovable.app/api/public/whatsapp/webhook
+ *   URL:    https://agrocheck-hub.lovable.app/api/public/whatsapp/webhook?token=<WEBHOOK_SECRET>
  *   Mode:   POST
  *   Events: messages
- *   Header: Authorization: Bearer <WEBHOOK_SECRET>
+ *
+ * NOTA: whapi.cloud NÃO suporta headers customizados no webhook.
+ * Por isso autenticamos via query param `?token=...` em vez de
+ * `Authorization: Bearer`.
  *
  * Hardenings aplicados (na ordem do handler de cada mensagem):
- *   1. Validação de origem via WEBHOOK_SECRET (Authorization: Bearer ...)
+ *   1. Validação de origem via WEBHOOK_SECRET (query param ?token=...)
  *   2. Filtro from_me
  *   3. Idempotência via tabela wa_processed (PK message_id)
  *   4. Grupos (@g.us) — apenas persistir, não responder (RF-32 passivo)
