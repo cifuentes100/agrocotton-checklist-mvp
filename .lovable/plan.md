@@ -106,3 +106,20 @@ Acrescentar uma seção `## Execução 2026-04-27` no final (preservando todo o 
 4. Resposta esperada do GET `/api/public/diag/env`: lista contendo `WHAPI_TOKEN` e `WEBHOOK_SECRET` em vez de `UAZAPI_*`
 5. Build sem erros — vou confirmar após escrever (sintaxe TS limpa, tipos explícitos, sem imports quebrados)
 6. ADR-018 — yes
+
+---
+
+## Patch 2026-04-27 (pós-execução) — auth via query param
+
+**Motivo:** whapi.cloud não suporta envio de headers customizados no webhook
+(testado: `Authorization: Bearer` não chega no nosso handler). Mudança:
+
+- `webhook.ts`: a validação `[1]` agora lê `?token=<WEBHOOK_SECRET>` da URL
+  via `reqUrl.searchParams.get("token")` em vez de `Authorization`.
+- Adicionado helper `maskTokenInSearch()` para mascarar o token nos logs do
+  GET (que incluíam `url.search` cru). Logs do POST não vazavam.
+- GET hint atualizado para refletir o novo formato de URL.
+- ADR-018 atualizado com nota explicativa e a URL completa a ser configurada
+  no painel whapi: `…/api/public/whatsapp/webhook?token=<WEBHOOK_SECRET>`.
+
+Build: `tsc --noEmit` passou sem erros.
