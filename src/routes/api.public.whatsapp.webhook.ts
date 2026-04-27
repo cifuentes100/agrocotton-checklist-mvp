@@ -2,46 +2,42 @@ import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 /**
- * Webhook público da uazapi.
+ * Webhook público da whapi.cloud (canal DEADPL-Y5ZLU, +55 61 99814 6922).
  *
- * Configurar na uazapi (POST /webhook):
- *   {
- *     "url": "https://<seu-dominio>/api/public/whatsapp/webhook",
- *     "events": ["messages"],
- *     "excludeMessages": ["wasSentByApi"]
- *   }
+ * Configurar no painel whapi.cloud (Settings → Webhooks):
+ *   URL:    https://agrocheck-hub.lovable.app/api/public/whatsapp/webhook
+ *   Mode:   POST
+ *   Events: messages
+ *   Header: Authorization: Bearer <WEBHOOK_SECRET>
  *
- * Por enquanto, este endpoint é um "echo bot": loga toda mensagem
- * recebida e responde "🤖 Recebi: <texto>" via uazapi /send/text.
+ * Hardenings aplicados (na ordem do handler de cada mensagem):
+ *   1. Validação de origem via WEBHOOK_SECRET (Authorization: Bearer ...)
+ *   2. Filtro from_me
+ *   3. Idempotência via tabela wa_processed (PK message_id)
+ *   4. Grupos (@g.us) — apenas persistir, não responder (RF-32 passivo)
+ *   5. Mensagens não-texto — responder com aviso ao operador
+ *
+ * Comportamento do bot: echo simples ("🤖 Recebi: «...»") como ponto de partida
+ * para o fluxo do checklist (RF-31). State machine virá em iteração futura.
  */
 
-type UazapiInbound = {
-  event?: string;
-  EventType?: string;
-  instance?: { id?: string; name?: string } | string;
-  message?: {
-    id?: string;
-    messageid?: string;
-    fromMe?: boolean;
-    sender?: string; // ex: "5564999999999@s.whatsapp.net"
-    chatid?: string;
-    text?: string;
-    content?: string;
-    type?: string; // text, image, audio, etc
-    mediaType?: string;
-    [k: string]: unknown;
-  };
-  // Algumas versões mandam "data" em vez de "message"
-  data?: any;
+type WhapiMessage = {
+  id: string;
+  from_me: boolean;
+  type: string;
+  chat_id: string; // termina em @s.whatsapp.net (1:1) ou @g.us (grupo)
+  from: string; // só dígitos, ex: "5564999999999"
+  timestamp: number;
+  text?: { body: string };
   [k: string]: unknown;
 };
 
-function normalizePhone(raw?: string): string | null {
-  if (!raw) return null;
-  // Remove tudo que não é dígito (tira "@s.whatsapp.net", "+", "-", " ")
-  const digits = raw.replace(/\D/g, "");
-  return digits.length >= 10 ? digits : null;
-}
+type WhapiInbound = {
+  messages?: WhapiMessage[];
+  event?: { type: string; event: string };
+  channel_id?: string;
+  [k: string]: unknown;
+};
 
 /**
  * Resumo seguro dos headers para log: mascara qualquer header
@@ -68,57 +64,40 @@ function headerSummary(headers: Headers): Record<string, string> {
   return out;
 }
 
-function extractMessage(payload: UazapiInbound) {
-  // Tenta nos formatos conhecidos da uazapi
-  const m = payload.message ?? payload.data?.message ?? payload.data;
-  if (!m || typeof m !== "object") return null;
-
-  const fromMe = Boolean(m.fromMe ?? m.key?.fromMe);
-  const sender: string | undefined =
-    m.sender ?? m.chatid ?? m.key?.remoteJid ?? m.from;
-  const phone = normalizePhone(sender);
-  const text: string | undefined =
-    m.text ??
-    m.content ??
-    m.body ??
-    m.messageBody ??
-    m.message?.conversation ??
-    m.message?.extendedTextMessage?.text;
-  const externalId: string | undefined =
-    m.id ?? m.messageid ?? m.key?.id;
-  const messageType: string =
-    (m.type as string) ?? (m.mediaType as string) ?? "text";
-
-  return { fromMe, phone, text, externalId, messageType };
-}
-
-async function sendUazapiText(phone: string, text: string) {
-  const host = process.env.UAZAPI_HOST;
-  const token = process.env.UAZAPI_TOKEN;
-  if (!host || !token) {
-    console.warn("[whatsapp/webhook] UAZAPI_HOST/UAZAPI_TOKEN not configured");
-    return { ok: false, error: "uazapi not configured" };
+/**
+ * Envia mensagem de texto via whapi.cloud.
+ *   POST https://gate.whapi.cloud/messages/text
+ *   Headers: Authorization: Bearer <WHAPI_TOKEN>
+ *   Body: { to: "<phone>@s.whatsapp.net", body: "..." }
+ */
+async function sendWhapiText(phone: string, text: string) {
+  const token = process.env.WHAPI_TOKEN;
+  if (!token) {
+    console.warn("[whatsapp/webhook] WHAPI_TOKEN not configured");
+    return { ok: false, error: "whapi not configured" };
   }
-  const url = `${host.replace(/\/$/, "")}/send/text`;
   try {
-    const res = await fetch(url, {
+    const res = await fetch("https://gate.whapi.cloud/messages/text", {
       method: "POST",
       headers: {
+        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
-        token,
       },
-      body: JSON.stringify({ number: phone, text }),
+      body: JSON.stringify({
+        to: `${phone}@s.whatsapp.net`,
+        body: text,
+      }),
     });
     const responseText = await res.text();
     if (!res.ok) {
       console.error(
-        `[whatsapp/webhook] uazapi send failed [${res.status}]: ${responseText}`,
+        `[whatsapp/webhook] whapi send failed [${res.status}]: ${responseText}`,
       );
       return { ok: false, error: `${res.status}: ${responseText}` };
     }
     return { ok: true, response: responseText };
   } catch (err) {
-    console.error("[whatsapp/webhook] uazapi send exception:", err);
+    console.error("[whatsapp/webhook] whapi send exception:", err);
     return {
       ok: false,
       error: err instanceof Error ? err.message : String(err),
@@ -126,11 +105,106 @@ async function sendUazapiText(phone: string, text: string) {
   }
 }
 
+/**
+ * Processa uma única mensagem da whapi aplicando os hardenings.
+ * Retorna um descritor curto pro log/resposta.
+ */
+async function handleSingleMessage(msg: WhapiMessage): Promise<string> {
+  const db = supabaseAdmin as any;
+
+  // [2] Filtro from_me — não reagir às próprias mensagens do bot
+  if (msg.from_me) return "skip:from_me";
+
+  // [3] Idempotência: whapi reenvia callback em falha, garantir unicidade
+  const { data: exists } = await db
+    .from("wa_processed")
+    .select("message_id")
+    .eq("message_id", msg.id)
+    .maybeSingle();
+  if (exists) return "skip:already_processed";
+
+  // Marca como processado ANTES dos side-effects.
+  // Se duas instâncias correrem em paralelo, a PK garante unicidade.
+  const { error: insertProcessedErr } = await db
+    .from("wa_processed")
+    .insert({ message_id: msg.id });
+  if (insertProcessedErr) {
+    // 23505 = unique_violation = outra instância já pegou. Pula sem erro.
+    if ((insertProcessedErr as any).code === "23505") {
+      return "skip:race_already_processed";
+    }
+    console.error(
+      "[whatsapp/webhook] wa_processed insert failed:",
+      insertProcessedErr,
+    );
+    // Segue mesmo assim — preferimos duplicar resposta a perder mensagem
+  }
+
+  const phone = msg.from;
+  const textBody = msg.text?.body ?? null;
+
+  // [4] Grupos — RF-32 passivo: persiste, NÃO responde
+  if (msg.chat_id.endsWith("@g.us")) {
+    await db.from("whatsapp_messages").insert({
+      direction: "inbound",
+      phone,
+      message_type: "group",
+      body: textBody,
+      external_id: msg.id,
+      raw_payload: msg as any,
+      status: "received",
+    });
+    return "group:logged_no_reply";
+  }
+
+  // Loga inbound 1:1
+  await db.from("whatsapp_messages").insert({
+    direction: "inbound",
+    phone,
+    message_type: msg.type ?? "unknown",
+    body: textBody,
+    external_id: msg.id,
+    raw_payload: msg as any,
+    status: "received",
+  });
+
+  // [5] Mensagens não-texto — responder com aviso, não ignorar silenciosamente
+  if (msg.type !== "text") {
+    const warnText =
+      "Por enquanto só processo mensagens de texto. Em breve aceitaremos fotos.";
+    const send = await sendWhapiText(phone, warnText);
+    await db.from("whatsapp_messages").insert({
+      direction: "outbound",
+      phone,
+      message_type: "text",
+      body: warnText,
+      status: send.ok ? "sent" : "failed",
+      error: send.ok ? null : send.error,
+      raw_payload: send.ok ? null : ({ error: send.error } as any),
+    });
+    return send.ok ? "non_text:warned" : "non_text:warn_failed";
+  }
+
+  // Echo bot
+  const replyText = `🤖 Recebi: «${textBody ?? ""}»`;
+  const send = await sendWhapiText(phone, replyText);
+  await db.from("whatsapp_messages").insert({
+    direction: "outbound",
+    phone,
+    message_type: "text",
+    body: replyText,
+    status: send.ok ? "sent" : "failed",
+    error: send.ok ? null : send.error,
+    raw_payload: send.ok ? null : ({ error: send.error } as any),
+  });
+  return send.ok ? "echo:sent" : "echo:failed";
+}
+
 export const Route = createFileRoute("/api/public/whatsapp/webhook")({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        // Health-check + diagnóstico de chamadas
+        // Health-check público (sem auth) — útil pra diagnosticar conectividade
         const url = new URL(request.url);
         console.log(
           `[whatsapp/webhook] GET ${url.pathname}${url.search} ` +
@@ -139,24 +213,40 @@ export const Route = createFileRoute("/api/public/whatsapp/webhook")({
         return Response.json({
           ok: true,
           service: "whatsapp-webhook",
+          provider: "whapi",
           method: "GET",
-          configured: Boolean(process.env.UAZAPI_HOST && process.env.UAZAPI_TOKEN),
-          hint: "POST aqui o payload da uazapi",
+          configured: Boolean(process.env.WHAPI_TOKEN),
+          auth_configured: Boolean(process.env.WEBHOOK_SECRET),
+          hint: "POST aqui o payload da whapi.cloud com header Authorization: Bearer <WEBHOOK_SECRET>",
         });
       },
       OPTIONS: async () => {
-        // Suporte a preflight CORS, caso a uazapi faça
         return new Response(null, {
           status: 204,
           headers: {
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization, token",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
           },
         });
       },
       POST: async ({ request }) => {
-        // LOG GROSSO no topo: garante que enxergamos QUALQUER chamada da uazapi
+        // [1] Validação de origem — PRIMEIRO de tudo, antes de ler o body
+        const expectedSecret = process.env.WEBHOOK_SECRET;
+        if (!expectedSecret) {
+          console.error("[whatsapp/webhook] WEBHOOK_SECRET not configured");
+          return new Response("Server misconfigured", { status: 500 });
+        }
+        const authHeader = request.headers.get("Authorization");
+        if (authHeader !== `Bearer ${expectedSecret}`) {
+          console.warn(
+            "[whatsapp/webhook] Unauthorized POST — auth header mismatch " +
+              `(present=${Boolean(authHeader)}, len=${authHeader?.length ?? 0})`,
+          );
+          return new Response("Unauthorized", { status: 401 });
+        }
+
+        // Agora sim, lê body e processa
         const reqUrl = new URL(request.url);
         const rawBody = await request.text();
         console.log(
@@ -166,54 +256,44 @@ export const Route = createFileRoute("/api/public/whatsapp/webhook")({
         );
 
         try {
-          let payload: UazapiInbound;
+          let payload: WhapiInbound;
           try {
-            payload = rawBody ? JSON.parse(rawBody) : ({} as UazapiInbound);
+            payload = rawBody ? JSON.parse(rawBody) : ({} as WhapiInbound);
           } catch {
             console.error("[whatsapp/webhook] Invalid JSON body");
             return new Response("Invalid JSON", { status: 400 });
           }
 
-          const parsed = extractMessage(payload);
-
-          // Loga o evento (mesmo que não tenhamos extraído nada útil)
-          const db = supabaseAdmin as any;
-          const { error: logErr } = await db.from("whatsapp_messages").insert({
-            direction: "inbound",
-            phone: parsed?.phone ?? "unknown",
-            message_type: parsed?.messageType ?? "unknown",
-            body: parsed?.text ?? null,
-            external_id: parsed?.externalId ?? null,
-            raw_payload: payload,
-            status: parsed ? "received" : "unparsed",
-          });
-          if (logErr) {
-            console.error("[whatsapp/webhook] insert inbound failed:", logErr);
+          const messages = Array.isArray(payload.messages)
+            ? payload.messages
+            : [];
+          if (messages.length === 0) {
+            return Response.json({
+              ok: true,
+              processed: 0,
+              note: "no messages in payload",
+            });
           }
 
-          // Ignora mensagens enviadas pela própria API
-          if (!parsed || parsed.fromMe || !parsed.phone) {
-            return Response.json({ ok: true, ignored: true });
+          const results: string[] = [];
+          for (const msg of messages) {
+            try {
+              if (!msg || typeof msg.id !== "string") {
+                results.push("skip:invalid_message");
+                continue;
+              }
+              const r = await handleSingleMessage(msg);
+              results.push(r);
+            } catch (err) {
+              console.error(
+                "[whatsapp/webhook] message handler exception:",
+                err,
+              );
+              results.push("error:exception");
+            }
           }
 
-          // Echo bot
-          const replyText = parsed.text
-            ? `🤖 Recebi: «${parsed.text}»`
-            : `🤖 Recebi uma mensagem do tipo "${parsed.messageType}". Por enquanto só respondo texto.`;
-
-          const send = await sendUazapiText(parsed.phone, replyText);
-
-          await db.from("whatsapp_messages").insert({
-            direction: "outbound",
-            phone: parsed.phone,
-            message_type: "text",
-            body: replyText,
-            status: send.ok ? "sent" : "failed",
-            error: send.ok ? null : send.error,
-            raw_payload: send.ok ? null : { error: send.error },
-          });
-
-          return Response.json({ ok: true, replied: send.ok });
+          return Response.json({ ok: true, processed: results.length, results });
         } catch (err) {
           console.error("[whatsapp/webhook] handler exception:", err);
           return Response.json(

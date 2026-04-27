@@ -17,8 +17,8 @@ export const Route = createFileRoute("/api/public/diag/env")({
           "SUPABASE_SERVICE_ROLE_KEY",
           "SUPABASE_JWKS",
           "SUPABASE_DB_URL",
-          "UAZAPI_HOST",
-          "UAZAPI_TOKEN",
+          "WHAPI_TOKEN",
+          "WEBHOOK_SECRET",
           "LOVABLE_API_KEY",
         ] as const;
 

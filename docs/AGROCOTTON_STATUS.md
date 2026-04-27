@@ -4,8 +4,8 @@
 > fonte de verdade sobre onde estamos. Decisões arquiteturais ficam em
 > `AGROCOTTON_DECISIONS_LOG.md`.
 
-**Última atualização:** 2026-04-25
-**Fase atual:** Segurança e versionamento — verificação final de RLS antes do Dashboard Admin
+**Última atualização:** 2026-04-27
+**Fase atual:** Bot WhatsApp — migração para whapi.cloud em execução
 **Próximo marco:** Admin com backlog + dashboard + CRUD
 
 > **Nota (ADR-011):** o checklist agora tem **11 itens**, não 10. O novo #1 é
@@ -81,12 +81,15 @@ Admin vê tudo no backlog
 - [x] Dashboard Mecânico — fila de validações NOK + drawer comparativo + histórico (ADR-010)
 - [ ] Dashboard Admin (backlog + dashboard + CRUD)
 
-### Bot WhatsApp (fora do Lovable)
-- [ ] Decisão: uazapi vs WhatsApp Cloud API
-- [ ] Webhook Edge Function (`wa-webhook`)
-- [ ] State machine do operador (seleção de máquina → 10 itens → foto → OK/NOK)
-- [ ] Cron 05:30 (kickoff matinal)
-- [ ] Supervisão passiva em grupo (RF-32)
+### Bot WhatsApp (rota Lovable + cron externo)
+- [x] Provedor WhatsApp definido: whapi.cloud (ADR-018)
+- [x] Canal DEADPL-Y5ZLU conectado (+55 61 99814 6922)
+- [x] Tabela wa_processed criada (idempotência)
+- [x] Webhook reescrito para whapi com 5 hardenings
+- [ ] WEBHOOK_SECRET definitivo (atualmente usando temporário)
+- [ ] Cron 05:30 kickoff matinal (Supabase pg_cron — pendente)
+- [ ] State machine do operador (seleção de máquina → 12 itens → foto OK/NOK)
+- [ ] Supervisão passiva em grupo enriquecida (RF-32)
 - [ ] Relatórios sob demanda (RF-33)
 
 ### Testes e validação

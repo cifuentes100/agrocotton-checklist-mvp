@@ -571,6 +571,41 @@ executado no Lovable gera automaticamente um commit no GitHub com autoria
 
 ---
 
+## ADR-018 — Migração de provedor WhatsApp: uazapi → whapi.cloud
+
+**Data:** 2026-04-27
+**Status:** ✅ Aceita e em implementação
+
+**Contexto:**
+ADR-003 deixou pendente a escolha do provedor WhatsApp. Avaliadas três opções:
+WhatsApp Cloud API (Meta), uazapi e whapi.cloud. Após implementação parcial
+com uazapi, identificamos que whapi.cloud oferece: menor custo (R$ 49/mês com
+desconto BR contra R$ 79/mês uazapi), sandbox gratuito, documentação em PT-BR,
+suporte nativo a grupos (RF-32) e formato de payload mais limpo.
+
+**Decisão:**
+Migrar provedor de uazapi para whapi.cloud. Canal `DEADPL-Y5ZLU` já criado
+e conectado ao número +55 61 99814 6922. Trial expira 02/05/2026.
+
+**Hardenings aplicados na migração (ordem no handler):**
+1. Validação de origem via WEBHOOK_SECRET no header Authorization
+2. Filtro de mensagens próprias (from_me)
+3. Idempotência via tabela wa_processed
+4. Tratamento passivo de grupos (apenas persiste, não responde)
+5. Resposta a mensagens não-texto (aviso ao operador)
+
+**Consequências:**
+- Bot vive no Lovable (rota /api/public/whatsapp/webhook)
+- Cron 05:30 (RF-31 kickoff) ainda precisará de Supabase pg_cron — fica fora do Lovable
+- Secrets antigos UAZAPI_HOST e UAZAPI_TOKEN ficam no Cloud até confirmação de
+  estabilidade da nova versão; remover manualmente depois
+- WEBHOOK_SECRET temporário em uso; substituir por valor definitivo gerado
+  com `openssl rand -hex 32` antes de produção real
+
+**Supersedes:** ADR-003
+
+---
+
 ## 📝 Template para próximas decisões
 
 ```
