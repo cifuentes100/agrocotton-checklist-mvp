@@ -1,185 +1,78 @@
-## Objetivo
+## Mudança vs plano anterior
 
-Trocar o provedor do webhook para **whapi.cloud** com 5 hardenings antes de publicar:
+Você não vai gerar o `WEBHOOK_SECRET` agora. Eu coloco um **valor aleatório fixo** no código como secret temporário, com:
 
-1. ADR documentando mudança vs ADR-004
-2. Idempotência via `wa_processed`
-3. Auth `Authorization: Bearer <WEBHOOK_SECRET>`
-4. Suporte passivo a grupo (`@g.us`) — RF-32
-5. Resposta amigável quando msg não-texto
+- Comentário `// TODO: SUBSTITUIR POR SECRET PRÓPRIO EM PRODUÇÃO` bem visível no código
+- Nota explícita no **ADR-018** dizendo que o secret é provisório e foi gerado pela IA
+- Dívida técnica registrada no `AGROCOTTON_STATUS.md` (seção "Pendências")
 
-## Observação importante sobre o número do ADR
+O secret temporário será adicionado como secret oficial no Lovable Cloud (`WEBHOOK_SECRET`) — ou seja, ele NÃO fica hardcoded no código-fonte, fica no cofre de secrets do projeto. Só a "origem" do valor é provisória.
 
-Você pediu **ADR-014**, mas esse número **já está usado** ("Governança de alterações de schema pelo Lovable", de 2026-04-24). O próximo livre é **ADR-018**. Vou criar como **ADR-018** e fazer ele referenciar ADR-004 explicitamente. Se preferir outro número, me avise antes de aprovar.
+**Valor que vou usar (gere você quando quiser trocar):**
 
-## O que eu (Lovable) faço quando aprovado
-
-### Arquivos editados
-
-#### 1. `src/routes/api.public.whatsapp.webhook.ts` — reescrita completa
-
-Estrutura nova do handler:
 ```text
-POST /api/public/whatsapp/webhook
-├── 0. verifyWebhookAuth(request)      ← Bearer WEBHOOK_SECRET, timing-safe
-│      ↳ falhou → 401 (sem ler body, sem logar payload)
-├── 1. parse JSON body
-├── 2. para cada msg em payload.messages[]:
-│      ├── alreadyProcessed(msg.id)?   ← INSERT em wa_processed (PK = unique)
-│      │      ↳ sim → skip
-│      ├── insert em whatsapp_messages (inbound, status='received')
-│      ├── from_me?                    → ignored
-│      ├── chat_id termina em @g.us?   → insert em communications (kind='wa_group_inbound'), NÃO responde
-│      ├── sem phone normalizável?     → ignored
-│      ├── type === 'text'?            → reply "🤖 Recebi: «...»"
-│      └── type !== 'text'?            → reply "Recebi (tipo X), por enquanto só respondo a texto..."
-└── 3. POST whapi: https://gate.whapi.cloud/messages/text
-       Headers: Authorization: Bearer <WHAPI_TOKEN>
-       Body:    { to: phone, body: text }
+wh_temp_2026_a7f3e9c2b8d4516e0f9a3c7b2d8e4f6a9c1b3d5e7f8a0b2c4d6e8f0a1b3c5d7e
 ```
 
-Tipos novos: `WhapiMessage` (com `id`, `from_me`, `type`, `chat_id`, `from`, `text.body`) e `WhapiInbound` (com `messages[]`).
+(64 chars, prefixo `wh_temp_` pra ficar óbvio que é temporário em qualquer log que vazar)
 
-Funções novas: `verifyWebhookAuth`, `timingSafeEqual` (manual, sem Web Crypto), `isGroupChat`, `alreadyProcessed`, `sendWhapiText` (substitui `sendUazapiText`), `handleSingleMessage`.
+## O resto do plano segue idêntico
 
-GET continua existindo como health-check (sem auth — só reporta `provider: "whapi.cloud"` e quais secrets estão configuradas).
-
-#### 2. `src/routes/api.public.diag.env.ts` — atualizar lista de envs
-
-Trocar `UAZAPI_HOST`, `UAZAPI_TOKEN` por `WHAPI_TOKEN`, `WEBHOOK_SECRET`.
-
-#### 3. `docs/AGROCOTTON_DECISIONS_LOG.md` — adicionar ADR-018 no final (antes do template)
-
-```markdown
-## ADR-018 — Webhook do WhatsApp roda no Lovable (whapi.cloud), cron 05:30 fica fora
-
-**Data:** 2026-04-27
-**Status:** ✅ Aceita
-**Supersede parcialmente:** ADR-004
-
-**Contexto:**
-ADR-004 (22/04) estabeleceu que o bot WhatsApp inteiro ficaria FORA do Lovable
-(em Edge Function Supabase ou similar). Durante a implementação, ficou claro
-que o webhook reativo (echo bot, comandos passivos) é simples o bastante para
-rodar diretamente como server route do TanStack Start no projeto Lovable,
-aproveitando a mesma infraestrutura de auth, RLS e logs.
-
-Provedor escolhido: **whapi.cloud** (já contratado, canal DEADPL-Y5ZLU, +55 61 99814-6922).
-- Endpoint envio: POST https://gate.whapi.cloud/messages/text
-- Auth: Authorization: Bearer <token>
-- Webhook inbound: POST com body { messages[], event, channel_id }
-
-**Decisão:**
-1. **Webhook reativo (inbound + responses 1:1)** roda no Lovable em
-   `/api/public/whatsapp/webhook` como TanStack Start server route.
-2. **Cron matinal 05:30 (kickoff diário)** continua FORA do Lovable —
-   provedor a definir (Supabase Edge Function + pg_cron, GitHub Actions,
-   ou serviço externo). Lovable não tem agendador nativo confiável para
-   horários fixos com timezone.
-3. Endpoint do webhook é **autenticado** via header
-   `Authorization: Bearer <WEBHOOK_SECRET>` (compartilhado com a whapi via
-   header customizado configurado no painel).
-4. **Idempotência obrigatória**: tabela `wa_processed (message_id PK)` impede
-   reprocessamento quando whapi reenvia callback em falha.
-5. **Grupos (chat_id @g.us)**: apenas registrar em `communications`, nunca
-   responder automaticamente (RF-32). Lógica passiva detalhada vira ADR
-   próprio depois.
-
-**Consequências:**
-- ✅ Webhook reaproveita Supabase admin client, RLS, secrets e logs do projeto
-- ✅ Menos infraestrutura para manter no curto prazo
-- ✅ Deploy automático junto com o resto do app
-- ⚠️ Cron 05:30 ainda precisa ser construído fora — não foi resolvido aqui
-- ⚠️ Lovable Worker tem limites de CPU/tempo por request — operações pesadas
-  (ex: gerar PDF de relatório) vão ter que sair daqui no futuro
-- ⚠️ ADR-004 fica parcialmente superseded (só na parte do webhook inbound)
-
-**Relaciona-se com:** ADR-004 (parcialmente superseded), ADR-001 (Supabase mantido)
-```
-
-#### 4. `docs/AGROCOTTON_STATUS.md` — atualizar 4 menções
-
-- Linha 58: "uazapi ou Cloud API" → "whapi.cloud"
-- Linha 85: "Decisão: uazapi vs Cloud API" → marcar resolvida (ver ADR-018)
-- Linha 86: "Webhook Edge Function" → "Webhook server route TanStack (`/api/public/whatsapp/webhook`)"
-- Linhas 122-123: remover "ADR-003 pendente" (resolvida via ADR-018)
-- Linha 129: idem
-
-#### 5. `.lovable/plan.md` — substituir pelo plano executado
-
-### Tabela nova (você executa, eu não tenho permissão)
-
-Vou entregar a SQL e você cola no **SQL Editor do Supabase** (link no fim):
-
-```sql
-CREATE TABLE public.wa_processed (
-  message_id text PRIMARY KEY,
-  processed_at timestamp with time zone NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_wa_processed_processed_at
-  ON public.wa_processed(processed_at DESC);
-
-ALTER TABLE public.wa_processed ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "admin le wa_processed"
-ON public.wa_processed
-FOR SELECT TO authenticated
-USING (public.current_role() = 'admin');
-```
-
-### Secrets novos (você adiciona pelo Lovable Settings → Cloud → Secrets)
-
-| Nome | Valor |
-|---|---|
-| `WHAPI_TOKEN` | `AhQsKL3V1PI4RgMD6LohXCvH9U9ih8i4` (do painel whapi) |
-| `WEBHOOK_SECRET` | string aleatória forte (ex: gerar com `openssl rand -hex 32`); essa mesma string vai como header `Authorization: Bearer <secret>` no painel whapi |
-
-Secrets existentes que **podem ser removidos depois** (não urgente, fazemos juntos numa próxima):
-- `UAZAPI_HOST`
-- `UAZAPI_TOKEN`
-
-## Por que essa abordagem (decisões técnicas)
-
-### Idempotência: tabela própria, não constraint em whatsapp_messages
-- `whatsapp_messages` tem semântica de log (várias linhas com mesmo `external_id` se houver erro de gravação parcial)
-- `wa_processed` é puramente sentinela: PK em `message_id`, INSERT antes de qualquer side-effect; race condition resolvida pelo próprio unique constraint do Postgres
-- Erro 23505 (unique_violation) na tentativa de INSERT = "já processado, pula"
-
-### Auth: Bearer header em vez de HMAC signature
-- Whapi não documenta signing nativo; só permite headers customizados
-- Bearer token compartilhado com comparação timing-safe é o padrão prático para esse provider
-- `WEBHOOK_SECRET` separado do `WHAPI_TOKEN` (defesa em profundidade: vazar um não compromete o outro)
-
-### timingSafeEqual manual em vez de Web Crypto
-- Web Crypto SubtleCrypto não tem comparação timing-safe direta
-- Implementação manual com XOR bit-a-bit é segura para strings curtas (<1KB) e roda no Worker
-
-### Grupo: insere em `communications` em vez de `whatsapp_messages`
-- `whatsapp_messages` continua sendo o "log do bot 1:1"
-- `communications` já existe pra eventos cross-canal — kind=`wa_group_inbound` separa visualmente
-- Se a lógica de grupo for crescer, fica fácil mover pra tabela própria depois
-
-## O que NÃO está no escopo (fica pra depois)
-
-- Cron 05:30 matinal — fora do Lovable, escopo separado
-- Gravar fotos vindas pelo WhatsApp em Storage — só responde texto por enquanto
-- Linkar `phone` em `whatsapp_messages` com `users.phone` (lookup do operador)
-- Lógica passiva detalhada para mensagens em grupo (vira ADR próprio quando especificarmos)
-- Comandos do bot ("status", "iniciar checklist") — echo bot puro por enquanto
-- Remoção dos secrets `UAZAPI_HOST` / `UAZAPI_TOKEN` (deixo pra você fazer manual depois)
+Todo o resto (reescrita do webhook, ADR-018, idempotência, suporte a grupo, msg não-texto, atualização de `diag/env`) continua exatamente como aprovado antes. A única diferença é a origem do `WEBHOOK_SECRET`.
 
 ## Ordem de execução depois da sua aprovação
 
-1. Eu reescrevo o webhook + diag/env + docs (5 arquivos)
-2. **Você** cola a SQL no SQL Editor do Supabase
-3. **Você** adiciona `WHAPI_TOKEN` e `WEBHOOK_SECRET` em Lovable Settings → Cloud → Secrets
-4. **Você** publica o projeto
-5. **Você** (Cowork) reconfigura URL do webhook na whapi para `https://agrocheck-hub.lovable.app/api/public/whatsapp/webhook` + header `Authorization: Bearer <WEBHOOK_SECRET>`
-6. **Você** manda mensagem teste do seu WhatsApp pessoal pro número do canal — deve receber o eco
+1. **Eu** adiciono `WHAPI_TOKEN` (`AhQsKL3V1PI4RgMD6LohXCvH9U9ih8i4`, do painel whapi que você já mostrou) e `WEBHOOK_SECRET` (valor temporário acima) como secrets do Lovable Cloud
+2. **Eu** reescrevo: webhook, diag/env, ADR-018, STATUS, plan.md (5 arquivos)
+3. **Você** publica o projeto pelo botão Publish do Lovable
+4. **Você (ou Cowork)** configura o webhook na whapi.cloud — passos detalhados abaixo
+5. **Você** manda mensagem teste do seu WhatsApp pessoal pro número do canal — deve receber o eco
 
-## Confirmações pedidas antes de executar
+## Passos pra configurar no painel da whapi.cloud (passo 4)
 
-- ☐ OK usar **ADR-018** (porque ADR-014 já existe)? Se quiser outro número, me diga
-- ☐ OK manter `UAZAPI_HOST`/`UAZAPI_TOKEN` nos secrets até remoção manual posterior?
-- ☐ OK eu não tocar no painel whapi (você + Cowork fazem)?
+Abra https://panel.whapi.cloud → entra no canal **DEADPL-Y5ZLU** (o do número +55 61 99814-6922).
+
+### A) Setar a URL do webhook
+
+Vai em **Settings → Webhooks** (ou "Channel settings → Webhooks", depende da versão do painel).
+
+| Campo | Valor |
+|---|---|
+| **URL** | `https://agrocheck-hub.lovable.app/api/public/whatsapp/webhook` |
+| **Mode** | `method: POST` (não use GET) |
+| **Events** | marcar só `messages` (mensagens recebidas). Pode marcar `statuses` depois se quiser tracking de entrega |
+
+### B) Adicionar o header de autenticação
+
+Mesma tela de webhooks, geralmente tem uma seção **"Headers"** ou **"Custom headers"**. Adicione:
+
+| Header name | Header value |
+|---|---|
+| `Authorization` | `Bearer wh_temp_2026_a7f3e9c2b8d4516e0f9a3c7b2d8e4f6a9c1b3d5e7f8a0b2c4d6e8f0a1b3c5d7e` |
+
+⚠️ Cuidado com a palavra `Bearer ` (com espaço depois) — sem ela o webhook responde 401.
+
+### C) Filtros recomendados (opcional mas útil)
+
+- **Exclude messages from me**: ativar (evita o bot responder mensagens que ele mesmo enviou)
+- **Exclude status updates**: deixar como quiser (não usamos statuses por enquanto)
+
+### D) Salvar e testar
+
+1. Clica em **Save** no painel
+2. Tem um botão **"Test webhook"** ou **"Send test"** em alguns painéis — clica pra mandar um POST de teste e ver se chega resposta `200 OK`
+3. Se voltar **401** → o header `Authorization` está errado (digitação ou faltou o `Bearer `)
+4. Se voltar **500 ou timeout** → o site não foi publicado ainda OU os secrets não foram salvos
+5. Se voltar **200** → manda mensagem real do seu celular pro número do canal e espera o eco
+
+### E) Quando quiser trocar o secret temporário (no futuro)
+
+1. Gera string nova: vai em https://generate-secret.vercel.app/64 e copia
+2. No Lovable: **Project Settings → Cloud → Secrets** → edita `WEBHOOK_SECRET` com o valor novo
+3. Republish o projeto
+4. Volta no painel da whapi → atualiza o header `Authorization` com o novo `Bearer <valor novo>`
+5. Salva e manda uma mensagem teste
+
+## Confirmação pedida
+
+- ☐ OK eu adicionar `WHAPI_TOKEN` e `WEBHOOK_SECRET` (com o valor temporário acima) como secrets do Lovable Cloud?
