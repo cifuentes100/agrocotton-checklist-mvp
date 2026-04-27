@@ -390,6 +390,21 @@ export type Database = {
         }
         Relationships: []
       }
+      wa_processed: {
+        Row: {
+          message_id: string
+          processed_at: string
+        }
+        Insert: {
+          message_id: string
+          processed_at?: string
+        }
+        Update: {
+          message_id?: string
+          processed_at?: string
+        }
+        Relationships: []
+      }
       whatsapp_messages: {
         Row: {
           body: string | null
