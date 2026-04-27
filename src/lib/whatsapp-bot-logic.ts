@@ -367,11 +367,11 @@ export async function handleBotMessage(
     }
 
     const first = items[0];
-    const intro =
-      `Olá, ${user.name}! 👋\n` +
-      `Iniciando checklist da máquina *${machine.serial}* (${machine.model}).\n\n` +
-      formatQuestion(1, total, first.name, first.description);
-    await sendWhatsAppMessage(fromPhone, intro);
+    await sendWhatsAppMessage(
+      fromPhone,
+      `Olá, ${user.name}! 👋\nIniciando checklist da máquina *${machine.serial}* (${machine.model}).`,
+    );
+    await sendItemQuestion(fromPhone, machine.id, 1, total, first);
     return "bot:run_started";
   }
 
