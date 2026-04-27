@@ -187,8 +187,19 @@ export async function handleBotMessage(
   }
   const total = items.length;
 
-  // 4. Sem run ativa → cooldown 12h + abre nova
+  // 4. Sem run ativa → exige gatilho explícito "tomatoma" + cooldown 12h + abre nova
   if (!run) {
+    // Gatilho estrito: só `tomatoma` (lowercase, exato, sem nada antes/depois) inicia.
+    // Imagem ou qualquer outro texto recebe orientação e NADA é gravado no banco.
+    const isTrigger = inbound.kind === "text" && inbound.text === "tomatoma";
+    if (!isTrigger) {
+      await sendWhatsAppMessage(
+        fromPhone,
+        `Olá, ${user.name}! 🤠 Para iniciar o checklist, envie a palavra *tomatoma* (exatamente assim, em minúsculas).`,
+      );
+      return "bot:awaiting_trigger";
+    }
+
     const since = new Date(
       Date.now() - COOLDOWN_HOURS * 60 * 60 * 1000,
     ).toISOString();
