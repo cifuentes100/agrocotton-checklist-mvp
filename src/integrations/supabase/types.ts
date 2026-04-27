@@ -176,7 +176,7 @@ export type Database = {
           id?: string
           item_id: number
           observation?: string | null
-          photo_path: string
+          photo_path?: string
           run_id: string
           status: string
           validated_at?: string | null

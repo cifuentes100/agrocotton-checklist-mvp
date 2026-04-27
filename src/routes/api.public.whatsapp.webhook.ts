@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { handleBotMessage } from "@/lib/whatsapp-bot-logic";
+import { handleBotMessage, type WhatsAppInbound } from "@/lib/whatsapp-bot-logic";
 
 /**
  * Webhook público da whapi.cloud (canal DEADPL-Y5ZLU, +55 61 99814 6922).
@@ -19,10 +19,12 @@ import { handleBotMessage } from "@/lib/whatsapp-bot-logic";
  *   2. Filtro from_me
  *   3. Idempotência via tabela wa_processed (PK message_id)
  *   4. Grupos (@g.us) — apenas persistir, não responder (RF-32 passivo)
- *   5. Mensagens não-texto — responder com aviso ao operador
+ *   5. Roteamento por tipo: text/image → handleBotMessage (state machine);
+ *      outros tipos → aviso curto.
  *
- * Comportamento do bot: echo simples ("🤖 Recebi: «...»") como ponto de partida
- * para o fluxo do checklist (RF-31). State machine virá em iteração futura.
+ * Comportamento do bot: state machine real do checklist (RF-31). Texto define
+ * status (ok/nok/observação) e bot pede foto em seguida (RF-03). Ver
+ * src/lib/whatsapp-bot-logic.ts.
  */
 
 type WhapiMessage = {
@@ -181,10 +183,22 @@ async function handleSingleMessage(msg: WhapiMessage): Promise<string> {
     status: "received",
   });
 
-  // [5] Mensagens não-texto — aviso curto, não passa pro bot
-  if (msg.type !== "text") {
+  // Monta payload para o bot conforme o tipo de mensagem.
+  // Suportamos: text e image (RF-03). Outros tipos: aviso curto e fim.
+  let inbound: WhatsAppInbound;
+  if (msg.type === "text") {
+    inbound = { kind: "text", text: textBody ?? "" };
+  } else if (msg.type === "image") {
+    const img = (msg as any).image ?? {};
+    inbound = {
+      kind: "image",
+      mediaId: typeof img.id === "string" ? img.id : undefined,
+      mediaLink: typeof img.link === "string" ? img.link : undefined,
+      caption: typeof img.caption === "string" ? img.caption : undefined,
+    };
+  } else {
     const warnText =
-      "Por enquanto só processo mensagens de texto. Em breve aceitaremos fotos.";
+      "Tipo de mensagem não suportado. Envie *texto* (ok/nok/observação) ou *foto* do item.";
     const send = await sendWhapiText(phone, warnText);
     await db.from("whatsapp_messages").insert({
       direction: "outbound",
@@ -199,7 +213,7 @@ async function handleSingleMessage(msg: WhapiMessage): Promise<string> {
   }
 
   // Bot real (checklist state machine)
-  const botResult = await handleBotMessage(phone, textBody ?? "");
+  const botResult = await handleBotMessage(phone, inbound);
   return botResult;
 }
 

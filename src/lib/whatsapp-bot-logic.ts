@@ -1,19 +1,40 @@
 /**
  * Lógica do bot WhatsApp para o checklist do operador.
  *
- * Fluxo:
- *  - Operador manda qualquer mensagem → se não tem run ativa, abrimos uma na 1ª máquina READY e enviamos o 1º item.
- *  - Cada resposta subsequente é gravada em item_responses na ordem dos checklist_items (order_idx).
- *  - Resposta:
+ * MÁQUINA DE ESTADOS (por item):
+ *   AGUARDA_TEXTO  → operador manda "ok" / "nok" / texto livre
+ *   AGUARDA_FOTO   → operador manda foto (RF-03 obrigatório)
+ *   ITEM_FECHADO   → grava item_response, avança pro próximo item
+ *
+ * Persistência do estado parcial: usamos a flag `validation_status='pending_photo'`
+ * num registro temporário em `item_responses` que só ganha photo_path real quando
+ * a foto chega. Após foto: `validation_status=null` (estado normal).
+ *
+ * REGRAS DE NEGÓCIO:
+ *  - Anti-duplicata: se o operador já completou um run nas últimas 12h, bot responde
+ *    "checklist de hoje já foi feito" e não cria novo. (machines.status fica 'ready'
+ *    sempre — só vira 'maintenance' quando mecânico flipa).
+ *  - Resposta de texto:
  *      "ok"  → status='ok'
  *      "nok" → status='nok'
  *      qualquer outra coisa → status='observar', observation=texto
- *  - Quando todos os itens forem respondidos, marcamos a run como completed.
+ *  - Após texto, bot pede foto. RF-03 exige foto em TODOS os status.
+ *  - Quando todos os 12 itens completam (texto+foto), run vira 'completed' e bot
+ *    fecha com "🤠 Vamo cavalo!" (RF-31).
  *
  * IMPORTANTE: phones em `users` são salvos COM '+', ex: "+556299677410".
  * O webhook da whapi entrega `from` SEM '+' (só dígitos), então sempre prefixamos.
  */
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+
+const COOLDOWN_HOURS = 12;
+const BUCKET = "checklist-photos";
+
+export type WhatsAppInbound =
+  | { kind: "text"; text: string }
+  | { kind: "image"; mediaId?: string; mediaLink?: string; caption?: string };
+
+// -------------------- WhatsApp send helpers --------------------
 
 export async function sendWhatsAppMessage(to: string, text: string) {
   const token = process.env.WHAPI_TOKEN;
@@ -49,6 +70,59 @@ export async function sendWhatsAppMessage(to: string, text: string) {
   }
 }
 
+/**
+ * Baixa mídia da whapi e sobe no bucket checklist-photos.
+ * Retorna o `path` salvo (ou null em erro).
+ */
+async function downloadAndStorePhoto(
+  inbound: Extract<WhatsAppInbound, { kind: "image" }>,
+  runId: string,
+  itemId: number,
+): Promise<{ path: string | null; error?: string }> {
+  const token = process.env.WHAPI_TOKEN;
+  if (!token) return { path: null, error: "WHAPI_TOKEN not configured" };
+
+  let url: string | null = inbound.mediaLink ?? null;
+  if (!url && inbound.mediaId) {
+    url = `https://gate.whapi.cloud/media/${inbound.mediaId}`;
+  }
+  if (!url) return { path: null, error: "no media url" };
+
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      return { path: null, error: `download ${res.status}: ${txt.slice(0, 200)}` };
+    }
+    const contentType = res.headers.get("content-type") ?? "image/jpeg";
+    const ext = contentType.includes("png")
+      ? "png"
+      : contentType.includes("webp")
+        ? "webp"
+        : "jpg";
+    const buf = new Uint8Array(await res.arrayBuffer());
+    const path = `runs/${runId}/${itemId}-${Date.now()}.${ext}`;
+
+    const db = supabaseAdmin as any;
+    const { error: upErr } = await db.storage
+      .from(BUCKET)
+      .upload(path, buf, { contentType, upsert: false });
+    if (upErr) {
+      return { path: null, error: `upload: ${upErr.message ?? String(upErr)}` };
+    }
+    return { path };
+  } catch (err) {
+    return {
+      path: null,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+// -------------------- Helpers de formatação --------------------
+
 function formatQuestion(
   itemNumber: number,
   total: number,
@@ -56,17 +130,23 @@ function formatQuestion(
   description: string | null,
 ): string {
   const desc = description?.trim() ? description : "";
-  return `*[${itemNumber}/${total}] ${name}*\n_${desc}_\n\nResponda: *ok*, *nok* ou texto livre.`;
+  return `*[${itemNumber}/${total}] ${name}*\n${desc ? `_${desc}_\n\n` : "\n"}Responda: *ok*, *nok* ou texto livre.`;
 }
+
+function askForPhoto(itemNumber: number, total: number, name: string): string {
+  return `📷 Agora envie a *foto* do item *[${itemNumber}/${total}] ${name}* (RF-03).`;
+}
+
+// -------------------- Core: handleBotMessage --------------------
 
 export async function handleBotMessage(
   fromPhone: string,
-  text: string,
+  inbound: WhatsAppInbound,
 ): Promise<string> {
   const db = supabaseAdmin as any;
   const phoneWithPlus = `+${fromPhone}`;
 
-  // 1. Busca operador
+  // 1. Operador?
   const { data: user } = await db
     .from("users")
     .select("id, name, phone, role")
@@ -82,7 +162,7 @@ export async function handleBotMessage(
     return "bot:not_registered";
   }
 
-  // 2. Run ativa
+  // 2. Run ativa?
   const { data: run } = await db
     .from("checklist_runs")
     .select("id, machine_id, started_at, status")
@@ -92,7 +172,7 @@ export async function handleBotMessage(
     .limit(1)
     .maybeSingle();
 
-  // 3. Todos os itens em ordem
+  // 3. Catálogo
   const { data: items, error: itemsErr } = await db
     .from("checklist_items")
     .select("id, order_idx, name, description")
@@ -107,8 +187,27 @@ export async function handleBotMessage(
   }
   const total = items.length;
 
-  // 4. Sem run ativa → abre nova
+  // 4. Sem run ativa → cooldown 12h + abre nova
   if (!run) {
+    const since = new Date(
+      Date.now() - COOLDOWN_HOURS * 60 * 60 * 1000,
+    ).toISOString();
+    const { data: recent } = await db
+      .from("checklist_runs")
+      .select("id, finished_at")
+      .eq("operator_id", user.id)
+      .eq("status", "completed")
+      .gte("finished_at", since)
+      .limit(1);
+
+    if (recent && recent.length > 0) {
+      await sendWhatsAppMessage(
+        fromPhone,
+        `✅ Checklist de hoje já foi concluído, ${user.name}. Valeu cavalo! 🤠\nNovo checklist liberado em até ${COOLDOWN_HOURS}h.`,
+      );
+      return "bot:cooldown_active";
+    }
+
     const { data: machine } = await db
       .from("machines")
       .select("id, serial, model")
@@ -120,7 +219,7 @@ export async function handleBotMessage(
     if (!machine) {
       await sendWhatsAppMessage(
         fromPhone,
-        "⚠️ Nenhuma máquina disponível (status 'ready'). Avise o implantador.",
+        "⚠️ Nenhuma máquina disponível (status 'ready'). Avise o implantador ou o mecânico.",
       );
       return "bot:no_machine";
     }
@@ -154,16 +253,25 @@ export async function handleBotMessage(
     return "bot:run_started";
   }
 
-  // 5. Run ativa → grava resposta do item corrente
+  // 5. Run ativa — descobrir estado: AGUARDA_TEXTO ou AGUARDA_FOTO
+  // Buscar TODAS as respostas do run pra reconstruir o estado.
   const { data: responses } = await db
     .from("item_responses")
-    .select("item_id")
+    .select("id, item_id, status, photo_path, observation, validation_status")
     .eq("run_id", run.id);
 
-  const answeredCount = (responses ?? []).length;
+  const allResponses = responses ?? [];
+  const completed = allResponses.filter(
+    (r: any) => r.validation_status !== "pending_photo",
+  );
+  const pendingPhoto = allResponses.find(
+    (r: any) => r.validation_status === "pending_photo",
+  );
 
-  if (answeredCount >= total) {
-    // Edge case: já respondeu tudo mas a run não foi fechada. Fecha agora.
+  const completedCount = completed.length;
+
+  // Se já tem 12 itens fechados, fecha a run (edge-case)
+  if (completedCount >= total && !pendingPhoto) {
     await db
       .from("checklist_runs")
       .update({
@@ -173,13 +281,100 @@ export async function handleBotMessage(
       .eq("id", run.id);
     await sendWhatsAppMessage(
       fromPhone,
-      `✅ Checklist já estava concluído! ${answeredCount}/${total} itens.`,
+      `🤠 Vamo cavalo! Checklist concluído (${total}/${total}).`,
     );
     return "bot:already_complete";
   }
 
-  const currentItem = items[answeredCount];
-  const trimmed = text.trim();
+  // ---------- ESTADO: AGUARDA_FOTO ----------
+  if (pendingPhoto) {
+    const currentItem = items.find((i: any) => i.id === pendingPhoto.item_id);
+    const itemNumber = (currentItem?.order_idx ?? completedCount + 1) as number;
+
+    if (inbound.kind !== "image") {
+      await sendWhatsAppMessage(
+        fromPhone,
+        `📷 Estou aguardando a *foto* do item *[${itemNumber}/${total}] ${currentItem?.name ?? ""}*.\nEnvie a foto agora (RF-03).`,
+      );
+      return "bot:awaiting_photo";
+    }
+
+    // Baixa + armazena
+    const { path, error: photoErr } = await downloadAndStorePhoto(
+      inbound,
+      run.id,
+      pendingPhoto.item_id,
+    );
+    if (!path) {
+      console.error("[wa-bot] photo store failed:", photoErr);
+      await sendWhatsAppMessage(
+        fromPhone,
+        `❌ Erro ao salvar foto: ${photoErr ?? "desconhecido"}. Tente enviar novamente.`,
+      );
+      return "bot:photo_store_failed";
+    }
+
+    // Update do registro pendente: vira definitivo
+    const { error: updErr } = await db
+      .from("item_responses")
+      .update({
+        photo_path: path,
+        validation_status: null,
+      })
+      .eq("id", pendingPhoto.id);
+
+    if (updErr) {
+      console.error("[wa-bot] failed to finalize response:", updErr);
+      await sendWhatsAppMessage(
+        fromPhone,
+        "❌ Erro ao registrar foto. Tente novamente.",
+      );
+      return "bot:photo_finalize_failed";
+    }
+
+    const newCompletedCount = completedCount + 1;
+    if (newCompletedCount >= total) {
+      await db
+        .from("checklist_runs")
+        .update({
+          status: "completed",
+          finished_at: new Date().toISOString(),
+        })
+        .eq("id", run.id);
+      await sendWhatsAppMessage(
+        fromPhone,
+        `🤠 Vamo cavalo! Checklist concluído (${total}/${total}).`,
+      );
+      return "bot:completed";
+    }
+
+    const next = items[newCompletedCount];
+    await sendWhatsAppMessage(
+      fromPhone,
+      `✅ Foto recebida.\n\n` +
+        formatQuestion(
+          newCompletedCount + 1,
+          total,
+          next.name,
+          next.description,
+        ),
+    );
+    return "bot:next_question";
+  }
+
+  // ---------- ESTADO: AGUARDA_TEXTO ----------
+  const currentItem = items[completedCount];
+
+  if (inbound.kind !== "text") {
+    // Recebeu foto sem ter sido pedida ainda — orienta
+    await sendWhatsAppMessage(
+      fromPhone,
+      `Antes da foto, responda em texto: *ok*, *nok* ou observação para o item *[${completedCount + 1}/${total}] ${currentItem.name}*.`,
+    );
+    return "bot:expected_text_got_image";
+  }
+
+  const trimmed = inbound.text.trim();
   const lower = trimmed.toLowerCase();
   let status: "ok" | "nok" | "observar";
   let observation: string | null = null;
@@ -192,16 +387,19 @@ export async function handleBotMessage(
     observation = trimmed;
   }
 
+  // Insert pendente (photo_path='', validation_status='pending_photo')
   const { error: respErr } = await db.from("item_responses").insert({
     run_id: run.id,
     item_id: currentItem.id,
     status,
     observation,
+    photo_path: "",
+    validation_status: "pending_photo",
     answered_at: new Date().toISOString(),
   });
 
   if (respErr) {
-    console.error("[wa-bot] failed to insert response:", respErr);
+    console.error("[wa-bot] failed to insert pending response:", respErr);
     await sendWhatsAppMessage(
       fromPhone,
       "❌ Erro ao registrar resposta. Tente novamente.",
@@ -209,30 +407,14 @@ export async function handleBotMessage(
     return "bot:response_insert_failed";
   }
 
-  const newCount = answeredCount + 1;
-
-  if (newCount >= total) {
-    await db
-      .from("checklist_runs")
-      .update({
-        status: "completed",
-        finished_at: new Date().toISOString(),
-      })
-      .eq("id", run.id);
-    await sendWhatsAppMessage(
-      fromPhone,
-      `✅ Checklist concluído! ${newCount}/${total} itens.`,
-    );
-    return "bot:completed";
-  }
-
-  const next = items[newCount];
   await sendWhatsAppMessage(
     fromPhone,
-    formatQuestion(newCount + 1, total, next.name, next.description),
+    askForPhoto(completedCount + 1, total, currentItem.name),
   );
-  return "bot:next_question";
+  return "bot:awaiting_photo_after_text";
 }
+
+// -------------------- Morning trigger --------------------
 
 export async function sendMorningMessages(): Promise<{
   sent: number;

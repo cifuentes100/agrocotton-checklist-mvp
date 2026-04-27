@@ -611,6 +611,154 @@ e conectado ao número +55 61 99814 6922. Trial expira 02/05/2026.
 
 ---
 
+## ADR-019 — Bot WhatsApp: state machine real do checklist (texto + foto)
+
+**Data:** 2026-04-27
+**Status:** ✅ Aceita e implementada
+**Relaciona-se com:** RF-31, RF-03, ADR-018
+
+**Contexto:**
+Após a migração para whapi.cloud (ADR-018), o webhook ficou estável mas o bot
+ainda era um eco simples. Para destravar o teste end-to-end com operador real,
+faltava implementar o fluxo completo do checklist (RF-31) com captura de foto
+(RF-03) — sem foto, RF-03 fica violado e a `item_responses.photo_path` (NOT NULL)
+quebra qualquer inserção.
+
+Três designs foram considerados para o canal foto via WhatsApp:
+- (A) Aceitar `image` do whapi, baixar via gate.whapi.cloud/media/{id} e subir
+  no bucket `checklist-photos`. Atende RF-03 integralmente.
+- (B) MVP texto-puro com `photo_path` nullable temporariamente. Mais rápido
+  mas viola RF-03.
+- (C) Híbrido com mensagens conversacionais separadas para foto. Mais código.
+
+**Decisão:**
+Implementada a opção (A) com fluxo conversacional em duas fases por item:
+1. Bot envia pergunta `[N/12] Nome — descrição. Responda: ok, nok ou texto`.
+2. Operador responde texto. Bot grava `item_response` parcial com
+   `validation_status='pending_photo'` e `photo_path=''`.
+3. Bot pede `📷 Agora envie a foto do item [N/12]`.
+4. Operador envia imagem. Bot baixa do whapi (Bearer WHAPI_TOKEN), sobe em
+   `checklist-photos/runs/{run_id}/{item_id}-{ts}.jpg`, faz UPDATE no
+   `item_response` com `photo_path` real e `validation_status=null`.
+5. Bot avança para o próximo item ou fecha a run com "🤠 Vamo cavalo!".
+
+A coluna `item_responses.photo_path` ganhou DEFAULT '' (não foi relaxada para
+NULL) — apenas o estado intermediário usa string vazia, e o UPDATE final sempre
+preenche com o caminho real. RF-03 fica preservado em estado terminal.
+
+Ordem dos itens é garantida pelo trigger `enforce_item_order` (BEFORE INSERT):
+o bot itera `checklist_items` por `order_idx` ascendente, então insere sempre
+o próximo correto.
+
+**Consequências:**
+- ✅ RF-03 cumprido: cada `item_response` final tem foto real no bucket
+- ✅ RF-31 cumprido: 12 itens em ordem estrita, fechamento "Vamo cavalo!"
+- ✅ Estado parcial sobrevive a desconexões: `validation_status='pending_photo'`
+  é a flag de retomada — operador pode demorar minutos entre texto e foto
+- ⚠️ Storage do whapi para o bucket Supabase tem janela de 7 dias (whapi
+  retém media só por esse período). Se o operador atrasar mais que isso, a
+  foto será perdida — improvável mas possível
+- ⚠️ Bucket `checklist-photos` é privado; mecânico/admin acessam via signed
+  URL no dashboard (já implementado)
+- ⚠️ Se o operador mandar foto antes da pergunta de foto (estado AGUARDA_TEXTO),
+  bot orienta a responder texto primeiro — não bloqueia o fluxo
+
+---
+
+## ADR-020 — Anti-duplicata diária: cooldown de 12h em vez de mudar machines.status
+
+**Data:** 2026-04-27
+**Status:** ✅ Aceita e implementada
+**Relaciona-se com:** ADR-019
+
+**Contexto:**
+Implementando o ADR-019, surgiu a pergunta: o que evita o operador iniciar 5
+checklists no mesmo dia mandando "oi" 5 vezes? Três opções foram consideradas:
+
+- Mudar `machines.status` para `completed` ao fim da run (impede novo).
+  Problema: implantador precisaria reativar manualmente toda manhã. Inviável.
+- Mudar `machines.status` para `in_use` durante a run e voltar para `ready`
+  ao fim. Problema: o estado intermediário não agrega nada e o "loop infinito"
+  não é problema de status, é de lógica do bot.
+- Adicionar `machines.status='validating'` para o mecânico aprovar a run inteira.
+  Problema: validação no nível da run duplica a validação por item já existente
+  em `item_responses.validation_status`. Burocracia desnecessária.
+
+A premissa "machines.status precisa mudar para evitar duplicata" é falsa.
+O ciclo da AgroCotton é diário: o operador faz checklist toda manhã, antes
+de colher. Se a máquina sai de `ready`, o fluxo do dia seguinte quebra.
+
+**Decisão:**
+`machines.status` permanece `ready` para sempre, exceto quando o **mecânico**
+explicitamente flipar para `maintenance` (única transição de saída do ciclo,
+acionada quando há item NOK crítico ou recusa do operador).
+
+Anti-duplicata é responsabilidade da **lógica do bot**: antes de criar nova
+`checklist_run`, query
+```sql
+select 1 from checklist_runs
+ where operator_id = ? and status = 'completed'
+   and finished_at >= now() - interval '12 hours'
+```
+Se existir, bot responde "Checklist de hoje já foi concluído. Valeu cavalo!"
+e não cria run nova.
+
+12h foi escolhido porque cobre o ciclo diário sem bloquear o operador caso
+ele acorde mais cedo (ex: 4h da manhã do dia seguinte).
+
+**Consequências:**
+- ✅ Implantador não precisa reativar máquinas diariamente
+- ✅ Status `maintenance` mantém seu papel claro: "máquina parou pelo
+  mecânico", não "checklist de hoje feito"
+- ✅ Sem validação dupla — `item_responses.validation_status` continua sendo
+  o único nível de validação do mecânico
+- ⚠️ Se o operador completar e iniciar genuinamente um segundo checklist
+  no mesmo dia (raro mas possível: troca de turno?), terá que esperar
+  12h. Decisão consciente — caso real, ajustar a regra
+
+---
+
+## ADR-021 — Endpoint público `/api/public/morning-trigger` para cron 05:30
+
+**Data:** 2026-04-27
+**Status:** ✅ Aceita e implementada
+**Relaciona-se com:** RF-31, ADR-018, ADR-019
+
+**Contexto:**
+RF-31 exige um disparo às 05:30 da manhã enviando uma mensagem inicial para
+todos os operadores cadastrados. Como o app vive no Lovable (TanStack Start
+em Cloudflare Worker), não há cron interno — precisa de um agendador externo
+chamando um endpoint HTTP.
+
+Duas opções: (a) Cloudflare Cron Trigger (acoplaria a infra do bot ao
+deploy do Worker), (b) Supabase pg_cron chamando uma URL pública (já temos
+Supabase, sem nova dependência).
+
+**Decisão:**
+Criado `POST /api/public/morning-trigger?token=<WEBHOOK_SECRET>` (mesmo
+secret usado pelo webhook do whapi, por simplicidade). O handler:
+1. Valida `?token` contra `WEBHOOK_SECRET`.
+2. Chama `sendMorningMessages()` que faz `select * from users where role='operador'`
+   e dispara a mensagem matinal para cada um via whapi.
+3. Retorna JSON `{ ok, sent, errors }` para inspeção do cron.
+
+O agendamento real no `pg_cron` (`cron.schedule('agrocotton-morning',
+'30 5 * * *', $$ select net.http_post(...) $$)`) ainda precisa ser criado
+manualmente no Supabase — fica como próximo passo no STATUS.
+
+**Consequências:**
+- ✅ Sem dependência adicional — usa pg_cron que já está no Supabase
+- ✅ Endpoint testável sem cron: `curl -X POST <url>?token=<secret>`
+- ⚠️ Se o número de operadores crescer muito, o handler pode estourar o
+  timeout do Worker (atualmente sequencial). Para >50 operadores, paralelizar
+  ou paginar
+- ⚠️ Reusar `WEBHOOK_SECRET` é simples mas acopla os dois pontos. Se um for
+  rotacionado, o outro também. Aceitável no MVP
+
+---
+
+
+
 ## 📝 Template para próximas decisões
 
 ```

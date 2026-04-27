@@ -4,9 +4,9 @@
 > fonte de verdade sobre onde estamos. Decisões arquiteturais ficam em
 > `AGROCOTTON_DECISIONS_LOG.md`.
 
-**Última atualização:** 2026-04-27
-**Fase atual:** Bot WhatsApp — migração para whapi.cloud em execução
-**Próximo marco:** Admin com backlog + dashboard + CRUD
+**Última atualização:** 2026-04-27 (sessão da noite)
+**Fase atual:** Bot WhatsApp — state machine real implementada (texto + foto)
+**Próximo marco:** Cron 05:30 ativo no pg_cron + teste end-to-end com operador real
 
 > **Nota (ADR-011):** o checklist agora tem **11 itens**, não 10. O novo #1 é
 > "Cool Gard (Água do motor tratada)". Todos os outros desceram uma posição.
@@ -86,9 +86,18 @@ Admin vê tudo no backlog
 - [x] Canal DEADPL-Y5ZLU conectado (+55 61 99814 6922)
 - [x] Tabela wa_processed criada (idempotência)
 - [x] Webhook reescrito para whapi com 5 hardenings
+- [x] **State machine do operador implementada** (ADR-019): seleção automática
+      da 1ª máquina ready, 12 itens em ordem, texto (ok/nok/observação) + foto
+      via WhatsApp salva em `checklist-photos`, finalização "🤠 Vamo cavalo!"
+- [x] **Anti-duplicata 12h** (ADR-020): operador que já completou um run nas
+      últimas 12h recebe "checklist de hoje já foi feito" em vez de iniciar
+      novo. `machines.status` permanece `ready` — só vira `maintenance`
+      quando mecânico flipa.
+- [x] **Endpoint `/api/public/morning-trigger`** criado (autenticado por
+      `?token=WEBHOOK_SECRET`); pronto para ser chamado pelo pg_cron 05:30.
+- [ ] Cron 05:30 kickoff matinal **agendado no pg_cron** (endpoint pronto;
+      falta criar o `cron.schedule(...)` no Supabase)
 - [ ] WEBHOOK_SECRET definitivo (atualmente usando temporário)
-- [ ] Cron 05:30 kickoff matinal (Supabase pg_cron — pendente)
-- [ ] State machine do operador (seleção de máquina → 12 itens → foto OK/NOK)
 - [ ] Supervisão passiva em grupo enriquecida (RF-32)
 - [ ] Relatórios sob demanda (RF-33)
 
@@ -120,10 +129,11 @@ ADR-008, ADR-010) e classificar os warnings pré-existentes do linter.
 
 ## 🗺️ Próximos passos imediatos
 
-1. Concluir verificação de RLS e catalogar findings (ADR futuro se necessário)
-2. Construir Dashboard Admin (RF-35: contador de lubrificação + relatórios + CRUD usuários)
-3. Decidir ADR-003 (provider WhatsApp: uazapi vs Cloud API)
-4. Construir Bot WhatsApp (após ADR-003 resolvido)
+1. Agendar `cron.schedule('agrocotton-morning', '30 5 * * *', ...)` no Supabase
+   chamando `POST /api/public/morning-trigger?token=<WEBHOOK_SECRET>` (endpoint pronto)
+2. Teste end-to-end com operador real: "oi" → 12 itens (texto + foto) → "Vamo cavalo!"
+3. Construir Dashboard Admin (RF-35: contador de lubrificação + relatórios + CRUD usuários)
+4. Concluir verificação de RLS e catalogar findings (ADR futuro se necessário)
 
 ---
 
