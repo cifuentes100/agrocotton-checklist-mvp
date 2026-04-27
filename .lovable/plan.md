@@ -1,53 +1,58 @@
-## Problema confirmado
+## Objetivo
 
-O webhook da uazapi chega no servidor mas falha com **HTTP 500**:
+Garantir que o site fique seguro para produção em `agrocotton.com.br`:
+1. Manter a capa atual (`/` mostra "AgroCotton" + botão **Entrar**)
+2. Bloquear o Google e qualquer outro buscador de indexar o site
+3. Confirmar que toda área interna já está protegida por login
 
-```
-Missing Supabase server environment variables.
-Ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set.
-```
+## Diagnóstico (já verificado)
 
-Confirmei agora:
-- No **Supabase** existem `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` ✅
-- No **Lovable** (runtime do Worker) só existem `LOVABLE_API_KEY`, `UAZAPI_HOST`, `UAZAPI_TOKEN` ❌
+A proteção de acesso **já está completa** no código:
 
-Os secrets do Supabase **não são automaticamente injetados** no runtime do TanStack/Cloudflare Worker. Eles só ficam disponíveis nas Edge Functions do próprio Supabase. Para o `client.server.ts` ler via `process.env.*`, precisam ser adicionados também como secrets do Lovable.
+| Camada | Status |
+|---|---|
+| `AuthProvider` envolve todo o app em `__root.tsx` | OK |
+| `ProtectedRoute` protege `/admin`, `/mecanico`, `/implantador` | OK |
+| Tela `/login` com Supabase Auth funcional | OK |
+| Sem login → redireciona pra `/login` | OK |
+| Role inválida → desloga automaticamente | OK |
+| RLS ativo nas tabelas | OK |
+| `service_role_key` só em edge functions, nunca no browser | OK |
 
-## Solução (sem mudança de código)
+**Conclusão:** não precisa adicionar gate de senha extra. O login Supabase + RLS já é a "senha de produção".
 
-### Passo 1 — Adicionar `SUPABASE_URL` como secret do Lovable
-Valor: `https://ctzajxycetufjkpqhidz.supabase.co`
-(Esse valor não é sensível — é o mesmo que já está no `.env` público.)
+## Mudança única necessária
 
-### Passo 2 — Adicionar `SUPABASE_SERVICE_ROLE_KEY` como secret do Lovable
-**Onde pegar:**
-1. Abrir https://supabase.com/dashboard/project/ctzajxycetufjkpqhidz/settings/api
-2. Rolar até **Project API keys**
-3. Copiar o valor do campo **`service_role`** (clicar em "Reveal" — é o longo, NÃO o `anon`)
-4. Colar no formulário que vou abrir
+Adicionar `<meta name="robots" content="noindex, nofollow" />` no `head()` do root route (`src/routes/__root.tsx`) para:
+- Impedir que Google/Bing indexem `agrocotton.com.br`
+- Impedir que apareça em pesquisas
+- Impedir que crawlers sigam links internos
 
-### Passo 3 — Aguardar redeploy (~30s) e re-testar
-- Mandar "oi" no WhatsApp pro número conectado
-- Esperado: receber `🤖 Recebi: «oi»` de volta
-- A mensagem deve aparecer na tabela `whatsapp_messages` (linhas inbound + outbound)
-
-### Passo 4 — Verificar nos logs do servidor
-Confirmar que:
-- O POST do webhook retorna 200
-- A inserção em `whatsapp_messages` foi bem-sucedida
-- O envio via uazapi `/send/text` retornou 200
-
-### Passo 5 (opcional) — Limpeza
-- Remover `src/routes/api.public.diag.env.ts` que era só pra diagnóstico
-
-## Riscos / observações
-
-- A `service_role_key` bypassa RLS — é usada **só** no servidor (`client.server.ts`), nunca no cliente. Já está sendo usada corretamente.
-- Não há mudança de código — só configuração de secrets.
-- O webhook (`src/routes/api.public.whatsapp.webhook.ts`) já está completo: log, parsing flexível, insert no banco e echo bot.
+Como é uma ferramenta interna (apenas equipe cadastrada), faz sentido não estar em buscadores.
 
 ## Detalhes técnicos
 
-- `src/integrations/supabase/client.server.ts` instancia o client admin via Proxy lazy lendo `process.env.SUPABASE_URL` e `process.env.SUPABASE_SERVICE_ROLE_KEY`. Sem essas vars, lança o erro visto.
-- Adicionar via `secrets--add_secret` no Lovable expõe as vars como `process.env.*` no Worker em runtime.
-- Os mesmos secrets já existem no Supabase mas não cruzam para o Worker do Lovable automaticamente.
+**Arquivo:** `src/routes/__root.tsx`
+
+Adicionar dentro do array `meta` do `head()`:
+
+```tsx
+{ name: "robots", content: "noindex, nofollow" },
+{ name: "googlebot", content: "noindex, nofollow" },
+```
+
+Por estar no root route, herda automaticamente em todas as rotas filhas.
+
+## O que NÃO vou fazer
+
+- Não vou adicionar tela de "senha única" antes do login (desnecessário, login Supabase já protege)
+- Não vou mudar visibilidade do Lovable para Private (você quer que a equipe acesse pelo domínio sem precisar de conta Lovable)
+- Não vou mexer em `ProtectedRoute`, `AuthContext`, `/login` ou RLS (já está correto)
+- Não vou redirecionar `/` automaticamente pra `/login` (você escolheu manter a capa)
+
+## Próximos passos depois deste plano
+
+1. Aplicar o `noindex` (1 edição)
+2. Você clica em **Publish**
+3. Conectamos o domínio `agrocotton.com.br` em Settings → Domains
+4. Voltamos pra finalizar o webhook do bot uazapi com a URL nova
