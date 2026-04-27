@@ -37,8 +37,6 @@ export const Route = createRootRoute({
           "Sistema de checklist para colheitadeiras de algodão — MVP em construção.",
       },
       { name: "author", content: "AgroCotton" },
-      { name: "robots", content: "noindex, nofollow" },
-      { name: "googlebot", content: "noindex, nofollow" },
       { property: "og:title", content: "AgroCotton Serviços" },
       {
         property: "og:description",
@@ -48,6 +46,12 @@ export const Route = createRootRoute({
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "AgroCotton Serviços" },
+      { name: "description", content: "AgroCotton Checklist MVP is a React application for managing cotton harvester checklists." },
+      { property: "og:description", content: "AgroCotton Checklist MVP is a React application for managing cotton harvester checklists." },
+      { name: "twitter:description", content: "AgroCotton Checklist MVP is a React application for managing cotton harvester checklists." },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/afea2fe3-1276-41e8-b239-cd06f9c73bc4" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/afea2fe3-1276-41e8-b239-cd06f9c73bc4" },
     ],
     links: [
       {
