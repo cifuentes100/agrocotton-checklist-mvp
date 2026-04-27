@@ -37,6 +37,8 @@ export const Route = createRootRoute({
           "Sistema de checklist para colheitadeiras de algodão — MVP em construção.",
       },
       { name: "author", content: "AgroCotton" },
+      { name: "robots", content: "noindex, nofollow" },
+      { name: "googlebot", content: "noindex, nofollow" },
       { property: "og:title", content: "AgroCotton Serviços" },
       {
         property: "og:description",
