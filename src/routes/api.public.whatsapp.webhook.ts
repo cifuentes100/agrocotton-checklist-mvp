@@ -5,13 +5,16 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
  * Webhook público da whapi.cloud (canal DEADPL-Y5ZLU, +55 61 99814 6922).
  *
  * Configurar no painel whapi.cloud (Settings → Webhooks):
- *   URL:    https://agrocheck-hub.lovable.app/api/public/whatsapp/webhook
+ *   URL:    https://agrocheck-hub.lovable.app/api/public/whatsapp/webhook?token=<WEBHOOK_SECRET>
  *   Mode:   POST
  *   Events: messages
- *   Header: Authorization: Bearer <WEBHOOK_SECRET>
+ *
+ * NOTA: whapi.cloud NÃO suporta headers customizados no webhook.
+ * Por isso autenticamos via query param `?token=...` em vez de
+ * `Authorization: Bearer`.
  *
  * Hardenings aplicados (na ordem do handler de cada mensagem):
- *   1. Validação de origem via WEBHOOK_SECRET (Authorization: Bearer ...)
+ *   1. Validação de origem via WEBHOOK_SECRET (query param ?token=...)
  *   2. Filtro from_me
  *   3. Idempotência via tabela wa_processed (PK message_id)
  *   4. Grupos (@g.us) — apenas persistir, não responder (RF-32 passivo)
@@ -62,6 +65,15 @@ function headerSummary(headers: Headers): Record<string, string> {
     }
   });
   return out;
+}
+
+/**
+ * Mascara o valor do query param `token` em uma URL (?token=...&...)
+ * para não vazá-lo em logs.
+ */
+function maskTokenInSearch(search: string): string {
+  if (!search) return search;
+  return search.replace(/([?&]token=)[^&]*/gi, "$1<masked>");
 }
 
 /**
@@ -207,7 +219,7 @@ export const Route = createFileRoute("/api/public/whatsapp/webhook")({
         // Health-check público (sem auth) — útil pra diagnosticar conectividade
         const url = new URL(request.url);
         console.log(
-          `[whatsapp/webhook] GET ${url.pathname}${url.search} ` +
+          `[whatsapp/webhook] GET ${url.pathname}${maskTokenInSearch(url.search)} ` +
             `headers=${JSON.stringify(headerSummary(request.headers))}`,
         );
         return Response.json({
@@ -217,7 +229,7 @@ export const Route = createFileRoute("/api/public/whatsapp/webhook")({
           method: "GET",
           configured: Boolean(process.env.WHAPI_TOKEN),
           auth_configured: Boolean(process.env.WEBHOOK_SECRET),
-          hint: "POST aqui o payload da whapi.cloud com header Authorization: Bearer <WEBHOOK_SECRET>",
+          hint: "POST aqui o payload da whapi.cloud usando ?token=<WEBHOOK_SECRET> na URL (whapi não suporta headers customizados)",
         });
       },
       OPTIONS: async () => {
@@ -232,22 +244,24 @@ export const Route = createFileRoute("/api/public/whatsapp/webhook")({
       },
       POST: async ({ request }) => {
         // [1] Validação de origem — PRIMEIRO de tudo, antes de ler o body
+        // whapi.cloud NÃO suporta headers customizados no webhook; por isso
+        // autenticamos via query param `?token=<WEBHOOK_SECRET>`.
         const expectedSecret = process.env.WEBHOOK_SECRET;
         if (!expectedSecret) {
           console.error("[whatsapp/webhook] WEBHOOK_SECRET not configured");
           return new Response("Server misconfigured", { status: 500 });
         }
-        const authHeader = request.headers.get("Authorization");
-        if (authHeader !== `Bearer ${expectedSecret}`) {
+        const reqUrl = new URL(request.url);
+        const tokenParam = reqUrl.searchParams.get("token");
+        if (tokenParam !== expectedSecret) {
           console.warn(
-            "[whatsapp/webhook] Unauthorized POST — auth header mismatch " +
-              `(present=${Boolean(authHeader)}, len=${authHeader?.length ?? 0})`,
+            "[whatsapp/webhook] Unauthorized POST — token query param mismatch " +
+              `(present=${Boolean(tokenParam)}, len=${tokenParam?.length ?? 0})`,
           );
           return new Response("Unauthorized", { status: 401 });
         }
 
         // Agora sim, lê body e processa
-        const reqUrl = new URL(request.url);
         const rawBody = await request.text();
         console.log(
           `[whatsapp/webhook] POST ${reqUrl.pathname} ` +
