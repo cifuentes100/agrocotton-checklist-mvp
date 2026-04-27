@@ -222,14 +222,33 @@ export const Route = createFileRoute("/api/public/whatsapp/webhook")({
           `[whatsapp/webhook] GET ${url.pathname}${maskTokenInSearch(url.search)} ` +
             `headers=${JSON.stringify(headerSummary(request.headers))}`,
         );
+        // Se vier ?token=... no GET, verifica se bate com o secret —
+        // ajuda a validar que o token configurado no painel whapi está certo
+        // SEM precisar disparar uma mensagem real.
+        const expectedSecret = process.env.WEBHOOK_SECRET;
+        const tokenParam = url.searchParams.get("token");
+        const tokenCheck: "missing" | "match" | "mismatch" | "no_secret_configured" =
+          !expectedSecret
+            ? "no_secret_configured"
+            : !tokenParam
+              ? "missing"
+              : tokenParam === expectedSecret
+                ? "match"
+                : "mismatch";
+
         return Response.json({
           ok: true,
           service: "whatsapp-webhook",
           provider: "whapi",
           method: "GET",
+          auth_method: "query_param",
+          auth_param_name: "token",
           configured: Boolean(process.env.WHAPI_TOKEN),
-          auth_configured: Boolean(process.env.WEBHOOK_SECRET),
-          hint: "POST aqui o payload da whapi.cloud usando ?token=<WEBHOOK_SECRET> na URL (whapi não suporta headers customizados)",
+          auth_configured: Boolean(expectedSecret),
+          token_check: tokenCheck,
+          webhook_url_template:
+            "https://<host>/api/public/whatsapp/webhook?token=<WEBHOOK_SECRET>",
+          hint: "Configure no painel whapi.cloud com a URL acima. whapi.cloud não suporta headers customizados, por isso autenticamos via query param.",
         });
       },
       OPTIONS: async () => {
