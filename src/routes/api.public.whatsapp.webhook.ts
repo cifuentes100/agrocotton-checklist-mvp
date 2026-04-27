@@ -220,7 +220,7 @@ export const Route = createFileRoute("/api/public/whatsapp/webhook")({
           method: "GET",
           configured: Boolean(process.env.WHAPI_TOKEN),
           auth_configured: Boolean(process.env.WEBHOOK_SECRET),
-          hint: "POST aqui o payload da whapi.cloud com header Authorization: Bearer <WEBHOOK_SECRET>",
+          hint: "POST aqui o payload da whapi.cloud usando ?token=<WEBHOOK_SECRET> na URL (whapi não suporta headers customizados)",
         });
       },
       OPTIONS: async () => {
@@ -235,22 +235,24 @@ export const Route = createFileRoute("/api/public/whatsapp/webhook")({
       },
       POST: async ({ request }) => {
         // [1] Validação de origem — PRIMEIRO de tudo, antes de ler o body
+        // whapi.cloud NÃO suporta headers customizados no webhook; por isso
+        // autenticamos via query param `?token=<WEBHOOK_SECRET>`.
         const expectedSecret = process.env.WEBHOOK_SECRET;
         if (!expectedSecret) {
           console.error("[whatsapp/webhook] WEBHOOK_SECRET not configured");
           return new Response("Server misconfigured", { status: 500 });
         }
-        const authHeader = request.headers.get("Authorization");
-        if (authHeader !== `Bearer ${expectedSecret}`) {
+        const reqUrl = new URL(request.url);
+        const tokenParam = reqUrl.searchParams.get("token");
+        if (tokenParam !== expectedSecret) {
           console.warn(
-            "[whatsapp/webhook] Unauthorized POST — auth header mismatch " +
-              `(present=${Boolean(authHeader)}, len=${authHeader?.length ?? 0})`,
+            "[whatsapp/webhook] Unauthorized POST — token query param mismatch " +
+              `(present=${Boolean(tokenParam)}, len=${tokenParam?.length ?? 0})`,
           );
           return new Response("Unauthorized", { status: 401 });
         }
 
         // Agora sim, lê body e processa
-        const reqUrl = new URL(request.url);
         const rawBody = await request.text();
         console.log(
           `[whatsapp/webhook] POST ${reqUrl.pathname} ` +
