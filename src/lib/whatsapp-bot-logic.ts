@@ -181,6 +181,7 @@ async function sendItemQuestion(
 }
 
 
+/**
  * Baixa mídia da whapi e sobe no bucket checklist-photos.
  * Retorna o `path` salvo (ou null em erro).
  */
