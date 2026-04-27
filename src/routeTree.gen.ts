@@ -19,6 +19,7 @@ import { Route as ImplantadorIndexRouteImport } from './routes/implantador.index
 import { Route as MecanicoHistoricoRouteImport } from './routes/mecanico.historico'
 import { Route as ImplantadorMaquinasRouteImport } from './routes/implantador.maquinas'
 import { Route as ImplantadorReferenciasMachineIdRouteImport } from './routes/implantador.referencias.$machineId'
+import { Route as ApiPublicMorningTriggerRouteImport } from './routes/api.public.morning-trigger'
 import { Route as ApiPublicWhatsappWebhookRouteImport } from './routes/api.public.whatsapp.webhook'
 import { Route as ApiPublicDiagEnvRouteImport } from './routes/api.public.diag.env'
 
@@ -73,6 +74,11 @@ const ImplantadorReferenciasMachineIdRoute =
     path: '/referencias/$machineId',
     getParentRoute: () => ImplantadorRoute,
   } as any)
+const ApiPublicMorningTriggerRoute = ApiPublicMorningTriggerRouteImport.update({
+  id: '/api/public/morning-trigger',
+  path: '/api/public/morning-trigger',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicWhatsappWebhookRoute =
   ApiPublicWhatsappWebhookRouteImport.update({
     id: '/api/public/whatsapp/webhook',
@@ -95,6 +101,7 @@ export interface FileRoutesByFullPath {
   '/mecanico/historico': typeof MecanicoHistoricoRoute
   '/implantador/': typeof ImplantadorIndexRoute
   '/mecanico/': typeof MecanicoIndexRoute
+  '/api/public/morning-trigger': typeof ApiPublicMorningTriggerRoute
   '/implantador/referencias/$machineId': typeof ImplantadorReferenciasMachineIdRoute
   '/api/public/diag/env': typeof ApiPublicDiagEnvRoute
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRoute
@@ -107,6 +114,7 @@ export interface FileRoutesByTo {
   '/mecanico/historico': typeof MecanicoHistoricoRoute
   '/implantador': typeof ImplantadorIndexRoute
   '/mecanico': typeof MecanicoIndexRoute
+  '/api/public/morning-trigger': typeof ApiPublicMorningTriggerRoute
   '/implantador/referencias/$machineId': typeof ImplantadorReferenciasMachineIdRoute
   '/api/public/diag/env': typeof ApiPublicDiagEnvRoute
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRoute
@@ -122,6 +130,7 @@ export interface FileRoutesById {
   '/mecanico/historico': typeof MecanicoHistoricoRoute
   '/implantador/': typeof ImplantadorIndexRoute
   '/mecanico/': typeof MecanicoIndexRoute
+  '/api/public/morning-trigger': typeof ApiPublicMorningTriggerRoute
   '/implantador/referencias/$machineId': typeof ImplantadorReferenciasMachineIdRoute
   '/api/public/diag/env': typeof ApiPublicDiagEnvRoute
   '/api/public/whatsapp/webhook': typeof ApiPublicWhatsappWebhookRoute
@@ -138,6 +147,7 @@ export interface FileRouteTypes {
     | '/mecanico/historico'
     | '/implantador/'
     | '/mecanico/'
+    | '/api/public/morning-trigger'
     | '/implantador/referencias/$machineId'
     | '/api/public/diag/env'
     | '/api/public/whatsapp/webhook'
@@ -150,6 +160,7 @@ export interface FileRouteTypes {
     | '/mecanico/historico'
     | '/implantador'
     | '/mecanico'
+    | '/api/public/morning-trigger'
     | '/implantador/referencias/$machineId'
     | '/api/public/diag/env'
     | '/api/public/whatsapp/webhook'
@@ -164,6 +175,7 @@ export interface FileRouteTypes {
     | '/mecanico/historico'
     | '/implantador/'
     | '/mecanico/'
+    | '/api/public/morning-trigger'
     | '/implantador/referencias/$machineId'
     | '/api/public/diag/env'
     | '/api/public/whatsapp/webhook'
@@ -175,6 +187,7 @@ export interface RootRouteChildren {
   ImplantadorRoute: typeof ImplantadorRouteWithChildren
   LoginRoute: typeof LoginRoute
   MecanicoRoute: typeof MecanicoRouteWithChildren
+  ApiPublicMorningTriggerRoute: typeof ApiPublicMorningTriggerRoute
   ApiPublicDiagEnvRoute: typeof ApiPublicDiagEnvRoute
   ApiPublicWhatsappWebhookRoute: typeof ApiPublicWhatsappWebhookRoute
 }
@@ -251,6 +264,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ImplantadorReferenciasMachineIdRouteImport
       parentRoute: typeof ImplantadorRoute
     }
+    '/api/public/morning-trigger': {
+      id: '/api/public/morning-trigger'
+      path: '/api/public/morning-trigger'
+      fullPath: '/api/public/morning-trigger'
+      preLoaderRoute: typeof ApiPublicMorningTriggerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/whatsapp/webhook': {
       id: '/api/public/whatsapp/webhook'
       path: '/api/public/whatsapp/webhook'
@@ -304,6 +324,7 @@ const rootRouteChildren: RootRouteChildren = {
   ImplantadorRoute: ImplantadorRouteWithChildren,
   LoginRoute: LoginRoute,
   MecanicoRoute: MecanicoRouteWithChildren,
+  ApiPublicMorningTriggerRoute: ApiPublicMorningTriggerRoute,
   ApiPublicDiagEnvRoute: ApiPublicDiagEnvRoute,
   ApiPublicWhatsappWebhookRoute: ApiPublicWhatsappWebhookRoute,
 }
