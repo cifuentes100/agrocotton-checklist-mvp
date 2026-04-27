@@ -29,6 +29,8 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 const COOLDOWN_HOURS = 12;
 const BUCKET = "checklist-photos";
+const REFERENCE_BUCKET = "reference-photos";
+const SIGNED_URL_TTL_SECONDS = 600; // 10 min
 
 export type WhatsAppInbound =
   | { kind: "text"; text: string }
@@ -69,6 +71,115 @@ export async function sendWhatsAppMessage(to: string, text: string) {
     };
   }
 }
+
+/**
+ * Envia uma imagem (via URL) com caption opcional pelo whapi.cloud.
+ *   POST https://gate.whapi.cloud/messages/image
+ *   Body: { to, media: <url>, caption? }
+ */
+export async function sendWhatsAppImage(
+  to: string,
+  imageUrl: string,
+  caption?: string,
+) {
+  const token = process.env.WHAPI_TOKEN;
+  if (!token) return { ok: false, error: "WHAPI_TOKEN not configured" };
+  try {
+    const res = await fetch("https://gate.whapi.cloud/messages/image", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        to: `${to}@s.whatsapp.net`,
+        media: imageUrl,
+        caption: caption ?? undefined,
+      }),
+    });
+    const responseText = await res.text();
+    if (!res.ok) {
+      console.error(
+        `[wa-bot] image send failed [${res.status}]: ${responseText}`,
+      );
+      return { ok: false, error: `${res.status}: ${responseText}` };
+    }
+    return { ok: true, response: responseText };
+  } catch (err) {
+    console.error("[wa-bot] image send exception:", err);
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+/**
+ * Envia a pergunta do item, com a foto de referência (se existir) como mídia
+ * e o texto da pergunta na caption. Fallback pra texto puro se não houver foto.
+ *
+ * Prioridade pra escolher a foto:
+ *   1. machine_reference_photos (machine_id, item_id) — específico desta máquina
+ *   2. checklist_items.reference_correct_path — fallback do catálogo
+ */
+async function sendItemQuestion(
+  phone: string,
+  machineId: string,
+  itemNumber: number,
+  total: number,
+  item: { id: number; name: string; description: string | null },
+): Promise<void> {
+  const db = supabaseAdmin as any;
+  const caption = formatQuestion(itemNumber, total, item.name, item.description);
+
+  // 1. tentar machine_reference_photos
+  let refPath: string | null = null;
+  const { data: machineRef } = await db
+    .from("machine_reference_photos")
+    .select("path")
+    .eq("machine_id", machineId)
+    .eq("item_id", item.id)
+    .maybeSingle();
+  if (machineRef?.path) {
+    refPath = machineRef.path as string;
+  } else {
+    // 2. fallback: catálogo
+    const { data: catalogItem } = await db
+      .from("checklist_items")
+      .select("reference_correct_path")
+      .eq("id", item.id)
+      .maybeSingle();
+    if (catalogItem?.reference_correct_path) {
+      refPath = catalogItem.reference_correct_path as string;
+    }
+  }
+
+  if (!refPath) {
+    await sendWhatsAppMessage(phone, caption);
+    return;
+  }
+
+  // Gera signed URL no bucket privado de referência
+  const { data: signed, error: signErr } = await db.storage
+    .from(REFERENCE_BUCKET)
+    .createSignedUrl(refPath, SIGNED_URL_TTL_SECONDS);
+
+  if (signErr || !signed?.signedUrl) {
+    console.error(
+      `[wa-bot] signed url failed for ${refPath}:`,
+      signErr ?? "no url returned",
+    );
+    await sendWhatsAppMessage(phone, caption);
+    return;
+  }
+
+  const r = await sendWhatsAppImage(phone, signed.signedUrl, caption);
+  if (!r.ok) {
+    // se imagem falhar, manda só o texto pra não perder o fluxo
+    await sendWhatsAppMessage(phone, caption);
+  }
+}
+
 
 /**
  * Baixa mídia da whapi e sobe no bucket checklist-photos.
@@ -256,11 +367,11 @@ export async function handleBotMessage(
     }
 
     const first = items[0];
-    const intro =
-      `Olá, ${user.name}! 👋\n` +
-      `Iniciando checklist da máquina *${machine.serial}* (${machine.model}).\n\n` +
-      formatQuestion(1, total, first.name, first.description);
-    await sendWhatsAppMessage(fromPhone, intro);
+    await sendWhatsAppMessage(
+      fromPhone,
+      `Olá, ${user.name}! 👋\nIniciando checklist da máquina *${machine.serial}* (${machine.model}).`,
+    );
+    await sendItemQuestion(fromPhone, machine.id, 1, total, first);
     return "bot:run_started";
   }
 
@@ -360,15 +471,13 @@ export async function handleBotMessage(
     }
 
     const next = items[newCompletedCount];
-    await sendWhatsAppMessage(
+    await sendWhatsAppMessage(fromPhone, `✅ Foto recebida.`);
+    await sendItemQuestion(
       fromPhone,
-      `✅ Foto recebida.\n\n` +
-        formatQuestion(
-          newCompletedCount + 1,
-          total,
-          next.name,
-          next.description,
-        ),
+      run.machine_id,
+      newCompletedCount + 1,
+      total,
+      next,
     );
     return "bot:next_question";
   }
@@ -389,10 +498,17 @@ export async function handleBotMessage(
   const lower = trimmed.toLowerCase();
   let status: "ok" | "nok" | "observar";
   let observation: string | null = null;
-  if (lower === "ok") {
-    status = "ok";
-  } else if (lower === "nok") {
+  // Detecção tolerante:
+  //   "nok", "não ok", "não tá ok", "não está ok" → nok
+  //   "ok", "Ok", "Está ok", "tá ok"              → ok
+  //   qualquer outra coisa                        → observar (texto livre)
+  const hasNok = /\bnok\b|n[ãa]o\s*(t[áa]\s*|est[áa]\s*)?ok/.test(lower);
+  const hasOk = /\bok\b/.test(lower);
+  if (hasNok) {
     status = "nok";
+    if (lower !== "nok") observation = trimmed;
+  } else if (hasOk) {
+    status = "ok";
   } else {
     status = "observar";
     observation = trimmed;
