@@ -498,10 +498,17 @@ export async function handleBotMessage(
   const lower = trimmed.toLowerCase();
   let status: "ok" | "nok" | "observar";
   let observation: string | null = null;
-  if (lower === "ok") {
-    status = "ok";
-  } else if (lower === "nok") {
+  // Detecção tolerante:
+  //   "nok", "não ok", "não tá ok", "não está ok" → nok
+  //   "ok", "Ok", "Está ok", "tá ok"              → ok
+  //   qualquer outra coisa                        → observar (texto livre)
+  const hasNok = /\bnok\b|n[ãa]o\s*(t[áa]\s*|est[áa]\s*)?ok/.test(lower);
+  const hasOk = /\bok\b/.test(lower);
+  if (hasNok) {
     status = "nok";
+    if (lower !== "nok") observation = trimmed;
+  } else if (hasOk) {
+    status = "ok";
   } else {
     status = "observar";
     observation = trimmed;
