@@ -588,11 +588,16 @@ Migrar provedor de uazapi para whapi.cloud. Canal `DEADPL-Y5ZLU` já criado
 e conectado ao número +55 61 99814 6922. Trial expira 02/05/2026.
 
 **Hardenings aplicados na migração (ordem no handler):**
-1. Validação de origem via WEBHOOK_SECRET no header Authorization
+1. Validação de origem via WEBHOOK_SECRET passado como query param `?token=...`
+   na URL do webhook (whapi.cloud não suporta headers customizados, então
+   `Authorization: Bearer` não é viável). O token é mascarado em todos os logs.
 2. Filtro de mensagens próprias (from_me)
 3. Idempotência via tabela wa_processed
 4. Tratamento passivo de grupos (apenas persiste, não responde)
 5. Resposta a mensagens não-texto (aviso ao operador)
+
+**URL do webhook a configurar no painel whapi.cloud:**
+`https://agrocheck-hub.lovable.app/api/public/whatsapp/webhook?token=<WEBHOOK_SECRET>`
 
 **Consequências:**
 - Bot vive no Lovable (rota /api/public/whatsapp/webhook)
