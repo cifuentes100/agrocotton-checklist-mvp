@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { handleBotMessage } from "@/lib/whatsapp-bot-logic";
 
 /**
  * Webhook público da whapi.cloud (canal DEADPL-Y5ZLU, +55 61 99814 6922).
@@ -180,7 +181,7 @@ async function handleSingleMessage(msg: WhapiMessage): Promise<string> {
     status: "received",
   });
 
-  // [5] Mensagens não-texto — responder com aviso, não ignorar silenciosamente
+  // [5] Mensagens não-texto — aviso curto, não passa pro bot
   if (msg.type !== "text") {
     const warnText =
       "Por enquanto só processo mensagens de texto. Em breve aceitaremos fotos.";
@@ -197,19 +198,9 @@ async function handleSingleMessage(msg: WhapiMessage): Promise<string> {
     return send.ok ? "non_text:warned" : "non_text:warn_failed";
   }
 
-  // Echo bot
-  const replyText = `🤖 Recebi: «${textBody ?? ""}»`;
-  const send = await sendWhapiText(phone, replyText);
-  await db.from("whatsapp_messages").insert({
-    direction: "outbound",
-    phone,
-    message_type: "text",
-    body: replyText,
-    status: send.ok ? "sent" : "failed",
-    error: send.ok ? null : send.error,
-    raw_payload: send.ok ? null : ({ error: send.error } as any),
-  });
-  return send.ok ? "echo:sent" : "echo:failed";
+  // Bot real (checklist state machine)
+  const botResult = await handleBotMessage(phone, textBody ?? "");
+  return botResult;
 }
 
 export const Route = createFileRoute("/api/public/whatsapp/webhook")({
