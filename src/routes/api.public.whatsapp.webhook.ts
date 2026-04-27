@@ -219,7 +219,7 @@ export const Route = createFileRoute("/api/public/whatsapp/webhook")({
         // Health-check público (sem auth) — útil pra diagnosticar conectividade
         const url = new URL(request.url);
         console.log(
-          `[whatsapp/webhook] GET ${url.pathname}${url.search} ` +
+          `[whatsapp/webhook] GET ${url.pathname}${maskTokenInSearch(url.search)} ` +
             `headers=${JSON.stringify(headerSummary(request.headers))}`,
         );
         return Response.json({
