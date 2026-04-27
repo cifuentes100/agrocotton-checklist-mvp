@@ -29,6 +29,8 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 const COOLDOWN_HOURS = 12;
 const BUCKET = "checklist-photos";
+const REFERENCE_BUCKET = "reference-photos";
+const SIGNED_URL_TTL_SECONDS = 600; // 10 min
 
 export type WhatsAppInbound =
   | { kind: "text"; text: string }
