@@ -19,10 +19,12 @@ import { handleBotMessage, type WhatsAppInbound } from "@/lib/whatsapp-bot-logic
  *   2. Filtro from_me
  *   3. Idempotência via tabela wa_processed (PK message_id)
  *   4. Grupos (@g.us) — apenas persistir, não responder (RF-32 passivo)
- *   5. Mensagens não-texto — responder com aviso ao operador
+ *   5. Roteamento por tipo: text/image → handleBotMessage (state machine);
+ *      outros tipos → aviso curto.
  *
- * Comportamento do bot: echo simples ("🤖 Recebi: «...»") como ponto de partida
- * para o fluxo do checklist (RF-31). State machine virá em iteração futura.
+ * Comportamento do bot: state machine real do checklist (RF-31). Texto define
+ * status (ok/nok/observação) e bot pede foto em seguida (RF-03). Ver
+ * src/lib/whatsapp-bot-logic.ts.
  */
 
 type WhapiMessage = {
