@@ -1,58 +1,79 @@
 ## Objetivo
 
-Garantir que o site fique seguro para produção em `agrocotton.com.br`:
-1. Manter a capa atual (`/` mostra "AgroCotton" + botão **Entrar**)
-2. Bloquear o Google e qualquer outro buscador de indexar o site
-3. Confirmar que toda área interna já está protegida por login
+Conectar o domínio `agrocotton.com.br` (e `www.agrocotton.com.br`) ao projeto publicado, para que o site e o webhook da uazapi usem a URL pública oficial.
 
-## Diagnóstico (já verificado)
+## Estado atual (verificado)
 
-A proteção de acesso **já está completa** no código:
+- Projeto **publicado** e visibilidade **public**: ✅
+- Published URL atual: `https://agrocheck-hub.lovable.app`
+- Custom domain configurado: **nenhum**
+- Secrets `SB_URL` e `SB_SERVICE_ROLE_KEY`: já adicionadas
+- Meta `noindex, nofollow` já no `__root.tsx`
 
-| Camada | Status |
-|---|---|
-| `AuthProvider` envolve todo o app em `__root.tsx` | OK |
-| `ProtectedRoute` protege `/admin`, `/mecanico`, `/implantador` | OK |
-| Tela `/login` com Supabase Auth funcional | OK |
-| Sem login → redireciona pra `/login` | OK |
-| Role inválida → desloga automaticamente | OK |
-| RLS ativo nas tabelas | OK |
-| `service_role_key` só em edge functions, nunca no browser | OK |
+## Importante: conexão de domínio é feita pela UI do Lovable
 
-**Conclusão:** não precisa adicionar gate de senha extra. O login Supabase + RLS já é a "senha de produção".
+A conexão de domínio **não é feita por código** — é configurada na interface do Lovable, em **Project Settings → Domains**. Não tenho ferramenta para fazer isso por você; quem precisa clicar é você. Este plano descreve exatamente o que fazer e o que fica do meu lado depois.
 
-## Mudança única necessária
+## Passo a passo (você executa na UI)
 
-Adicionar `<meta name="robots" content="noindex, nofollow" />` no `head()` do root route (`src/routes/__root.tsx`) para:
-- Impedir que Google/Bing indexem `agrocotton.com.br`
-- Impedir que apareça em pesquisas
-- Impedir que crawlers sigam links internos
+### 1. Abrir Domains
+- Desktop: clique no nome do projeto (canto superior esquerdo) → **Settings** → aba **Domains**
+- Mobile: botão **…** (canto inferior direito) → **Settings** → aba **Domains**
 
-Como é uma ferramenta interna (apenas equipe cadastrada), faz sentido não estar em buscadores.
+### 2. Conectar o domínio raiz
+- Clique em **Connect Domain**
+- Digite: `agrocotton.com.br`
+- Lovable vai mostrar os registros DNS necessários
 
-## Detalhes técnicos
+### 3. Conectar o www como entrada separada
+- Clique em **Connect Domain** de novo
+- Digite: `www.agrocotton.com.br`
+- (o `www` **não** é adicionado automaticamente — precisa entrar como segunda entrada)
 
-**Arquivo:** `src/routes/__root.tsx`
+### 4. Configurar DNS no registrador (onde o domínio foi comprado: Registro.br, GoDaddy, etc.)
 
-Adicionar dentro do array `meta` do `head()`:
+Adicionar exatamente o que o Lovable mostrar. Os valores padrão são:
 
-```tsx
-{ name: "robots", content: "noindex, nofollow" },
-{ name: "googlebot", content: "noindex, nofollow" },
-```
+| Tipo | Nome | Valor |
+|---|---|---|
+| A | `@` (raiz) | `185.158.133.1` |
+| A | `www` | `185.158.133.1` |
+| TXT | `_lovable` | (valor `lovable_verify=...` que aparece na tela) |
 
-Por estar no root route, herda automaticamente em todas as rotas filhas.
+**Atenção:**
+- Remover quaisquer registros A/AAAA/CNAME antigos para `@` e `www` que apontem para outros lugares
+- Se usa Cloudflare ou outro proxy: marcar **"Domain uses Cloudflare or a similar proxy"** na seção Advanced antes de salvar (muda pra setup via CNAME)
 
-## O que NÃO vou fazer
+### 5. Aguardar verificação
+- Status passa por: **Verifying** → **Setting up** → **Active**
+- Pode levar de minutos até 72h (geralmente <1h no Registro.br)
+- SSL é provisionado automaticamente
 
-- Não vou adicionar tela de "senha única" antes do login (desnecessário, login Supabase já protege)
-- Não vou mudar visibilidade do Lovable para Private (você quer que a equipe acesse pelo domínio sem precisar de conta Lovable)
-- Não vou mexer em `ProtectedRoute`, `AuthContext`, `/login` ou RLS (já está correto)
-- Não vou redirecionar `/` automaticamente pra `/login` (você escolheu manter a capa)
+### 6. Definir domínio principal
+- Quando ambos ficarem **Active**, marcar `agrocotton.com.br` como **Primary**
+- O `www` redireciona automaticamente para o principal
 
-## Próximos passos depois deste plano
+## O que eu (Lovable) faço depois que ficar Active
 
-1. Aplicar o `noindex` (1 edição)
-2. Você clica em **Publish**
-3. Conectamos o domínio `agrocotton.com.br` em Settings → Domains
-4. Voltamos pra finalizar o webhook do bot uazapi com a URL nova
+Quando você me avisar que o domínio está **Active**, eu vou:
+
+1. **Atualizar a documentação interna** (`docs/AGROCOTTON_STATUS.md`, `.lovable/plan.md`) com a nova URL oficial
+2. **Confirmar a URL do webhook da uazapi** que você precisa colar no painel deles:
+   ```
+   https://agrocotton.com.br/api/public/whatsapp/webhook
+   ```
+3. **Verificar** que `noindex` e proteção de login continuam funcionando no domínio novo
+4. **Testar** o endpoint público de diagnóstico (`/api/public/diag/env`) para confirmar que as secrets `SB_URL`/`SB_SERVICE_ROLE_KEY` carregam no domínio novo
+
+## O que NÃO precisa mudar no código
+
+- `src/integrations/supabase/client.ts` continua usando o Supabase project URL (não muda)
+- Webhook handler (`api.public.whatsapp.webhook.ts`) já é agnóstico de domínio — funciona em qualquer host
+- `noindex` no `__root.tsx` herda em todas as rotas, inclusive no domínio novo
+
+## Resumo do que você precisa fazer agora
+
+1. Abrir **Settings → Domains** no Lovable
+2. Conectar `agrocotton.com.br` e `www.agrocotton.com.br` (duas entradas)
+3. Copiar os registros DNS que aparecerem e colar no seu registrador
+4. Me avisar quando o status virar **Active** para eu atualizar a URL do webhook
