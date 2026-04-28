@@ -1,0 +1,1 @@
+UPDATE public.users SET phone = '+5555991299413' WHERE phone = '+5562991299413' AND name = 'Esposa';
