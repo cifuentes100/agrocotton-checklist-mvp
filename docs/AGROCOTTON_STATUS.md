@@ -80,6 +80,9 @@ Admin vê tudo no backlog
 - [x] Dashboard Implantador — layout + lista de máquinas + cadastro de máquinas + 12 fotos de referência por máquina (ADR-009, ADR-013)
 - [x] Dashboard Mecânico — fila de validações NOK + drawer comparativo + histórico (ADR-010)
 - [ ] Dashboard Admin (backlog + dashboard + CRUD)
+  - [x] CRUD de usuários (`/admin/usuarios`) — listagem, criação, edição de role, reset de senha; botão "Disparar bom-dia" manual
+  - [ ] Backlog consolidado de runs
+  - [ ] Dashboard com métricas (lubrificação RF-35, OK/NOK por máquina, etc.)
 
 ### Bot WhatsApp (rota Lovable + cron externo)
 - [x] Provedor WhatsApp definido: whapi.cloud (ADR-018)
