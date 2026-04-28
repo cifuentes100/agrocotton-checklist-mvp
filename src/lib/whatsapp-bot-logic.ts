@@ -271,7 +271,7 @@ function formatQuestion(
   description: string | null,
 ): string {
   const desc = description?.trim() ? description : "";
-  return `*[${itemNumber}/${total}] ${name}*\n${desc ? `_${desc}_\n\n` : "\n"}Responda: *ok*, *nok* ou texto livre.`;
+  return `*[${itemNumber}/${total}] ${name}*\n${desc ? `_${desc}_\n\n` : "\n"}Responda *ok* (sem foto), *nok* (com foto) ou um texto livre (com foto).`;
 }
 
 function askForPhoto(itemNumber: number, total: number, name: string): string {
