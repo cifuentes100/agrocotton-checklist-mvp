@@ -1,45 +1,53 @@
-## Problema
+## Desativar usuário do bot (conceito reutilizável)
 
-Quando alguém que **não está cadastrado** na tabela `users` (ou está cadastrado mas sem `role='operador'`) manda mensagem no WhatsApp, o bot responde:
+Você quer "desativar" a Esposa: zero interação com o bot, zero bom-dia, mas sem perder o registro nem dar permissão indevida. Vou tratar isso como um **conceito do sistema** — coluna `active` em `users` — e não como hack pontual pra ela.
 
-> "👋 Olá! Seu número não está cadastrado como operador. Procure o responsável."
+## Mudança de schema
 
-Isso é uma ação/tarefa que você não quer. Não cadastrado = silêncio total.
+Migration adicionando à tabela `public.users`:
 
-## Onde está
-
-`src/lib/whatsapp-bot-logic.ts`, função `handleBotMessage`, linhas 297-303.
-
-```ts
-if (!user) {
-  await sendWhatsAppMessage(
-    fromPhone,
-    "👋 Olá! Seu número não está cadastrado como operador. Procure o responsável.",
-  );
-  return "bot:not_registered";
-}
+```sql
+ALTER TABLE public.users ADD COLUMN active boolean NOT NULL DEFAULT true;
 ```
 
-## Mudança
+Backfill: todos existentes ficam `active=true`. Em seguida:
 
-Trocar por:
-
-```ts
-if (!user) {
-  // Silêncio: número não cadastrado não recebe nenhuma resposta/ação.
-  return "bot:not_registered_silent";
-}
+```sql
+UPDATE public.users
+   SET active = false, morning_enabled = false
+ WHERE id = '803d40a8-e0b8-4ace-a3ac-8b41ea41c7d4';  -- Esposa
 ```
 
-Sem `sendWhatsAppMessage`. O webhook ainda registra a mensagem recebida em `whatsapp_messages` (auditoria continua), mas o bot não responde nada.
+## Mudanças de código
 
-## Verificações de efeito colateral
+**1. `src/lib/whatsapp-bot-logic.ts` — `handleBotMessage` (linha ~290):**
+Adicionar `.eq("active", true)` na busca do operador. Usuário desativado cai no branch `if (!user)` e o bot fica em silêncio (já é o comportamento de hoje pra não cadastrado).
 
-- **Bom-dia (`sendMorningMessages`)**: já filtra por `role='operador'` na query (linha 692), então só cadastrados como operador recebem. **Nada a mudar.**
-- **`kill` / `tomatoma` / fluxo de checklist**: tudo dentro do mesmo `handleBotMessage` depois do early return — bloqueado naturalmente pra não cadastrado.
-- **Logs / auditoria**: o handler continua retornando `"bot:not_registered_silent"`, então fica rastreável no log do webhook que chegou mensagem de número estranho — só não responde.
+**2. `src/lib/whatsapp-bot-logic.ts` — `sendMorningMessages` (linha ~692):**
+Adicionar `.eq("active", true)` na query de operadores que recebem bom-dia.
 
-## Entregável
+**3. Funções RPC do admin (`admin_list_users`, `admin_create_user`, `admin_update_user`):**
+Migration redefine essas funções pra ler/escrever a coluna `active`. `admin_create_user` recebe novo parâmetro `_active boolean DEFAULT true`. `admin_update_user` recebe `_active boolean`. `admin_list_users` retorna `active` no SELECT.
 
-1. Editar `src/lib/whatsapp-bot-logic.ts` removendo o `sendWhatsAppMessage` do bloco `if (!user)` e ajustando o return.
-2. Atualizar `docs/AGROCOTTON_DECISIONS_LOG.md` registrando a decisão: "número não cadastrado não recebe resposta automática (privacidade / evita ruído)".
+**4. Tela `/admin/usuarios` (`src/routes/admin.usuarios.tsx`):**
+- Tabela ganha coluna "Ativo" (badge verde/cinza)
+- Form de edição/criação ganha switch "Ativo"
+- Tipo TS gerado se atualiza sozinho após migration
+
+## Resultado pra Esposa
+
+Logo após a migration:
+- Se ela mandar QUALQUER coisa no WhatsApp → bot não responde nada (cai no silêncio que implementamos antes)
+- Bom-dia das 5:30 → não recebe
+- Continua aparecendo na lista do admin com badge "Inativo" — você pode reativar com 1 clique no futuro
+
+## Pontos a confirmar
+
+- **Esposa tem run em andamento?** Já cancelamos as duas runs anteriores via SQL. Se sobrar alguma, o `.eq("active", true)` vai impedir ela de continuar — a run fica órfã `in_progress` no banco até alguém limpar. Vou verificar e cancelar se houver, na mesma migration.
+- **RLS:** a coluna `active` não muda nenhuma policy (continua sendo o admin via RPC `SECURITY DEFINER` que faz tudo).
+
+## Entregáveis
+
+1. Migration: `ALTER TABLE users ADD COLUMN active`, `UPDATE` da Esposa, `CANCEL` de runs ativas dela, redefinição das 3 RPCs admin.
+2. `whatsapp-bot-logic.ts`: 2 filtros `.eq("active", true)`.
+3. `admin.usuarios.tsx`: coluna "Ativo" + switch no form.
