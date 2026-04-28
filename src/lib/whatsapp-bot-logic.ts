@@ -347,7 +347,7 @@ export async function handleBotMessage(
       `🔄 Reiniciando seu checklist, ${user.name}… 🤠`,
     );
     // Deixa fluxo seguir como "sem run", o bloco abaixo vai criar uma nova.
-    (run as any) = null;
+    run = null;
   }
 
   // 4. Sem run ativa → exige gatilho explícito "tomatoma" + cooldown 12h + abre nova
