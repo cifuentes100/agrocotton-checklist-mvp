@@ -132,11 +132,12 @@ ADR-008, ADR-010) e classificar os warnings pré-existentes do linter.
 
 ## 🗺️ Próximos passos imediatos
 
-1. Agendar `cron.schedule('agrocotton-morning', '30 5 * * *', ...)` no Supabase
+1. Definir e setar `WEBHOOK_SECRET` definitivo (substituir o temporário)
+2. Agendar `cron.schedule('agrocotton-morning', '30 5 * * *', ...)` no Supabase
    chamando `POST /api/public/morning-trigger?token=<WEBHOOK_SECRET>` (endpoint pronto)
-2. Teste end-to-end com operador real: "oi" → 12 itens (texto + foto) → "Vamo cavalo!"
-3. Construir Dashboard Admin (RF-35: contador de lubrificação + relatórios + CRUD usuários)
-4. Concluir verificação de RLS e catalogar findings (ADR futuro se necessário)
+3. Teste end-to-end com operador real: "oi" → 12 itens (texto + foto) → "Vamo cavalo!"
+4. Completar Dashboard Admin: backlog de runs + métricas (RF-35 contador de lubrificação)
+5. Concluir verificação de RLS e catalogar findings (ADR futuro se necessário)
 
 ---
 
