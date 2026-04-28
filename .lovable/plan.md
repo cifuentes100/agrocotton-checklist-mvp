@@ -1,24 +1,46 @@
+## Diagnóstico
+
+Encontrei **dois problemas** olhando os logs do `whatsapp_messages`:
+
+### 1. Telefone errado no banco
+O WhatsApp da sua esposa envia do número **`555591299413`** (DDI 55 + DDD 55 + `91299413` — 8 dígitos, **sem o nono dígito** de celular).
+
+Eu havia cadastrado como `+5555991299413` (com o 9 extra). Por isso o bot não a reconhece e responde *"Seu número não está cadastrado como operador"*.
+
+### 2. WHAPI atingiu o limite do plano trial
+Mesmo com o cadastro corrigido, **todas** as respostas do bot pra ela estão falhando com:
+```
+402: trial version limit exceeded
+```
+A conta whapi.cloud passou do limite gratuito. Enquanto isso não for resolvido, ela não vai receber **nenhuma** mensagem do bot — independente do cadastro.
+
+---
+
 ## Plano
 
-### 1. Cadastrar o Fernando como operador
-Inserir novo registro em `public.users`:
-- `name`: `Fernando`
-- `phone`: `+5562999549759` (padrão com `+`, igual aos outros operadores)
-- `role`: `operador`
+### 1. Corrigir o telefone no banco
+Migration:
+```sql
+UPDATE public.users 
+SET phone = '+555591299413' 
+WHERE name = 'Esposa';
+```
 
-### 2. Saudação personalizada para o Fernando
-Em `src/lib/whatsapp-bot-logic.ts`, na função `handleBotMessage`, ajustar as duas mensagens de saudação para detectar se o operador é o Fernando (pelo telefone `+5562999549759`) e, nesse caso, trocar o texto:
+### 2. Atualizar a verificação no código do bot
+Em `src/lib/whatsapp-bot-logic.ts`, trocar:
+```ts
+const isEsposa = phoneWithPlus === "+5555991299413";
+```
+por:
+```ts
+const isEsposa = phoneWithPlus === "+555591299413";
+```
+(duas ocorrências)
 
-- **Quando ele manda algo sem ter run ativa e sem o gatilho `tomatoma`** (mensagem "Olá, {nome}! 🤠 Para iniciar..."):
-  → "Você por aqui patrãozinho? É o Fernando, vai querer testar o bot agora! 🤠 Manda *tomatoma* (em minúsculas) pra começar."
+### 3. Ação manual sua (fora do código)
+**Fazer upgrade do plano whapi.cloud** ou trocar o token (`WHAPI_TOKEN`) por uma conta com cota disponível. Sem isso, o bot continua não respondendo pra ninguém de fora dos números já testados hoje.
 
-- **Quando ele manda `tomatoma` e a run nova é criada** (mensagem "Olá, {nome}! 👋 Iniciando checklist..."):
-  → "Você por aqui patrãozinho? É o Fernando, vai querer testar o bot agora! 👋 Iniciando checklist da máquina *{serial}* ({model})."
+---
 
-Demais operadores continuam recebendo a saudação padrão.
-
-### 3. Sem mudanças em schema
-Apenas insert de dado em `users` + ajuste de texto no bot. Nenhuma migration de estrutura.
-
-### Resultado
-Fernando manda mensagem do `+55 62 9954-9759`, o bot reconhece como operador e responde com a saudação personalizada de "patrãozinho".
+## Resultado esperado
+Após a migration + ajuste no código + upgrade whapi: ela manda `tomatoma` e recebe a saudação *"Você por aqui Mulé? 💛"*.
