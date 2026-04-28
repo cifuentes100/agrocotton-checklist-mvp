@@ -1,53 +1,29 @@
-## Desativar usuário do bot (conceito reutilizável)
+## Trocar gatilho `tomatoma` → `okok`
 
-Você quer "desativar" a Esposa: zero interação com o bot, zero bom-dia, mas sem perder o registro nem dar permissão indevida. Vou tratar isso como um **conceito do sistema** — coluna `active` em `users` — e não como hack pontual pra ela.
+Substituir a palavra-chave que inicia o checklist no bot WhatsApp, de `tomatoma` para `okok`. Aplicado tanto na lógica de detecção quanto em todas as mensagens de instrução enviadas ao operador.
 
-## Mudança de schema
+## Arquivos alterados
 
-Migration adicionando à tabela `public.users`:
+**`src/lib/whatsapp-bot-logic.ts`** (8 ocorrências):
 
-```sql
-ALTER TABLE public.users ADD COLUMN active boolean NOT NULL DEFAULT true;
-```
+1. **Linha 320** — mensagem após cancelamento: `Manda *tomatoma*` → `Manda *okok*`
+2. **Linha 357** — comentário: "tomatoma" → "okok"
+3. **Linha 361** — comparação de reset: `=== "tomatoma"` → `=== "okok"`
+4. **Linha 378** — comentário: gatilho "tomatoma" → "okok"
+5. **Linha 380** — comentário: só `tomatoma` → só `okok`
+6. **Linha 382** — comparação do gatilho: `inbound.text === "tomatoma"` → `inbound.text === "okok"`
+7. **Linhas 387–390** — três mensagens de boas-vindas/instrução (Fernando, Mulé, default): trocar `*tomatoma*` por `*okok*`
+8. **Linha 395** — comentário: caminho do `tomatoma` → `okok`
+9. **Linha 732** — mensagem de bom-dia: `Manda *tomatoma*` → `Manda *okok*`
 
-Backfill: todos existentes ficam `active=true`. Em seguida:
+## Comportamento resultante
 
-```sql
-UPDATE public.users
-   SET active = false, morning_enabled = false
- WHERE id = '803d40a8-e0b8-4ace-a3ac-8b41ea41c7d4';  -- Esposa
-```
+- Operador manda `okok` (lowercase exato) → bot inicia checklist
+- Operador manda `okok` durante run ativa → bot reseta e abre nova run
+- Mensagens de cancelamento, bom-dia e boas-vindas instruem `okok`
+- Qualquer outra coisa (incluindo `tomatoma`) → bot pede `okok` ou ignora conforme regras atuais
 
-## Mudanças de código
+## Pontos a observar
 
-**1. `src/lib/whatsapp-bot-logic.ts` — `handleBotMessage` (linha ~290):**
-Adicionar `.eq("active", true)` na busca do operador. Usuário desativado cai no branch `if (!user)` e o bot fica em silêncio (já é o comportamento de hoje pra não cadastrado).
-
-**2. `src/lib/whatsapp-bot-logic.ts` — `sendMorningMessages` (linha ~692):**
-Adicionar `.eq("active", true)` na query de operadores que recebem bom-dia.
-
-**3. Funções RPC do admin (`admin_list_users`, `admin_create_user`, `admin_update_user`):**
-Migration redefine essas funções pra ler/escrever a coluna `active`. `admin_create_user` recebe novo parâmetro `_active boolean DEFAULT true`. `admin_update_user` recebe `_active boolean`. `admin_list_users` retorna `active` no SELECT.
-
-**4. Tela `/admin/usuarios` (`src/routes/admin.usuarios.tsx`):**
-- Tabela ganha coluna "Ativo" (badge verde/cinza)
-- Form de edição/criação ganha switch "Ativo"
-- Tipo TS gerado se atualiza sozinho após migration
-
-## Resultado pra Esposa
-
-Logo após a migration:
-- Se ela mandar QUALQUER coisa no WhatsApp → bot não responde nada (cai no silêncio que implementamos antes)
-- Bom-dia das 5:30 → não recebe
-- Continua aparecendo na lista do admin com badge "Inativo" — você pode reativar com 1 clique no futuro
-
-## Pontos a confirmar
-
-- **Esposa tem run em andamento?** Já cancelamos as duas runs anteriores via SQL. Se sobrar alguma, o `.eq("active", true)` vai impedir ela de continuar — a run fica órfã `in_progress` no banco até alguém limpar. Vou verificar e cancelar se houver, na mesma migration.
-- **RLS:** a coluna `active` não muda nenhuma policy (continua sendo o admin via RPC `SECURITY DEFINER` que faz tudo).
-
-## Entregáveis
-
-1. Migration: `ALTER TABLE users ADD COLUMN active`, `UPDATE` da Esposa, `CANCEL` de runs ativas dela, redefinição das 3 RPCs admin.
-2. `whatsapp-bot-logic.ts`: 2 filtros `.eq("active", true)`.
-3. `admin.usuarios.tsx`: coluna "Ativo" + switch no form.
+- `okok` é curto e pode colidir com respostas de item (operador responde `ok` para itens conformes). A comparação é **exata e lowercase**, então `ok` sozinho não dispara, e `okok` só é interpretado como gatilho **fora** de uma pergunta ativa (ou como reset). Sem risco de conflito com fluxo de respostas.
+- Nenhuma migration ou mudança de schema necessária.

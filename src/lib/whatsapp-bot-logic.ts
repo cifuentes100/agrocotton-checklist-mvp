@@ -317,7 +317,7 @@ export async function handleBotMessage(
         .eq("id", activeRun.id);
       await sendWhatsAppMessage(
         fromPhone,
-        `🛑 Checklist cancelado, ${user.name}. Manda *tomatoma* pra começar de novo.`,
+        `🛑 Checklist cancelado, ${user.name}. Manda *okok* pra começar de novo.`,
       );
       return "bot:killed";
     }
@@ -354,11 +354,11 @@ export async function handleBotMessage(
   }
   const total = items.length;
 
-  // 3.5. RESET: se operador mandar "tomatoma" exato e já tiver run ativa,
+  // 3.5. RESET: se operador mandar "okok" exato e já tiver run ativa,
   // cancela a run atual e segue como se não houvesse run (vai criar nova).
   // Isso destrava casos em que o operador ficou perdido no meio do fluxo.
   const isResetTrigger =
-    inbound.kind === "text" && inbound.text.trim().toLowerCase() === "tomatoma";
+    inbound.kind === "text" && inbound.text.trim().toLowerCase() === "okok";
   if (run && isResetTrigger) {
     await db
       .from("checklist_runs")
@@ -375,24 +375,24 @@ export async function handleBotMessage(
     run = null;
   }
 
-  // 4. Sem run ativa → exige gatilho explícito "tomatoma" + cooldown 12h + abre nova
+  // 4. Sem run ativa → exige gatilho explícito "okok" + cooldown 12h + abre nova
   if (!run) {
-    // Gatilho estrito: só `tomatoma` (lowercase, exato, sem nada antes/depois) inicia.
+    // Gatilho estrito: só `okok` (lowercase, exato, sem nada antes/depois) inicia.
     // Imagem ou qualquer outro texto recebe orientação e NADA é gravado no banco.
-    const isTrigger = inbound.kind === "text" && inbound.text === "tomatoma";
+    const isTrigger = inbound.kind === "text" && inbound.text === "okok";
     const isFernando = phoneWithPlus === "+5562999549759";
     const isEsposa = phoneWithPlus === "+555591299413";
     if (!isTrigger) {
       const greeting = isFernando
-        ? `Você por aqui patrãozinho? É o Fernando, vai querer testar o bot agora! 🤠 Manda *tomatoma* (em minúsculas) pra começar.`
+        ? `Você por aqui patrãozinho? É o Fernando, vai querer testar o bot agora! 🤠 Manda *okok* (em minúsculas) pra começar.`
         : isEsposa
-        ? `Você por aqui Mulé? 💛 Manda *tomatoma* (em minúsculas) pra começar o checklist.`
-        : `Olá, ${user.name}! 🤠 Para iniciar o checklist, envie a palavra *tomatoma* (exatamente assim, em minúsculas).`;
+        ? `Você por aqui Mulé? 💛 Manda *okok* (em minúsculas) pra começar o checklist.`
+        : `Olá, ${user.name}! 🤠 Para iniciar o checklist, envie a palavra *okok* (exatamente assim, em minúsculas).`;
       await sendWhatsAppMessage(fromPhone, greeting);
       return "bot:awaiting_trigger";
     }
 
-    // NOTE: cooldown de 12h removido do caminho do `tomatoma` — gatilho manual
+    // NOTE: cooldown de 12h removido do caminho do `okok` — gatilho manual
     // sempre força reinício (útil para demo/validação). O cooldown natural
     // continua existindo via mensagem automática "bom dia" (1x/dia).
 
@@ -729,7 +729,7 @@ export async function sendMorningMessages(
     const phoneWithoutPlus = String(op.phone).replace("+", "");
     const r = await sendWhatsAppMessage(
       phoneWithoutPlus,
-      `Bom dia, ${op.name}! 🌅 Hora do checklist. Manda *tomatoma* (em minúsculas) pra começar.`,
+      `Bom dia, ${op.name}! 🌅 Hora do checklist. Manda *okok* (em minúsculas) pra começar.`,
     );
     if (r.ok) {
       sent++;
