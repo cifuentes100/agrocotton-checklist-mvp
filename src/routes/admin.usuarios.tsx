@@ -141,6 +141,7 @@ function Shell() {
       role: u.role,
       morning_time: timeToHHMM(u.morning_time),
       morning_enabled: u.morning_enabled,
+      active: u.active,
     });
     setDialogOpen(true);
   };
