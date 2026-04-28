@@ -38,9 +38,33 @@ export type WhatsAppInbound =
 
 // -------------------- WhatsApp send helpers --------------------
 
+/** Loga mensagem outbound em whatsapp_messages (best-effort, nunca bloqueia o fluxo). */
+async function logOutbound(
+  phone: string,
+  messageType: "text" | "image",
+  body: string | null,
+  status: "sent" | "error",
+  error: string | null,
+) {
+  try {
+    const db = supabaseAdmin as any;
+    await db.from("whatsapp_messages").insert({
+      direction: "outbound",
+      phone,
+      message_type: messageType,
+      body,
+      status,
+      error,
+    });
+  } catch (e) {
+    console.error("[wa-bot] failed to log outbound:", e);
+  }
+}
+
 export async function sendWhatsAppMessage(to: string, text: string) {
   const token = process.env.WHAPI_TOKEN;
   if (!token) {
+    await logOutbound(to, "text", text, "error", "WHAPI_TOKEN not configured");
     return { ok: false, error: "WHAPI_TOKEN not configured" };
   }
   try {
@@ -60,15 +84,16 @@ export async function sendWhatsAppMessage(to: string, text: string) {
       console.error(
         `[wa-bot] send failed [${res.status}]: ${responseText}`,
       );
+      await logOutbound(to, "text", text, "error", `${res.status}: ${responseText.slice(0, 500)}`);
       return { ok: false, error: `${res.status}: ${responseText}` };
     }
+    await logOutbound(to, "text", text, "sent", null);
     return { ok: true, response: responseText };
   } catch (err) {
     console.error("[wa-bot] send exception:", err);
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
+    const msg = err instanceof Error ? err.message : String(err);
+    await logOutbound(to, "text", text, "error", msg);
+    return { ok: false, error: msg };
   }
 }
 
