@@ -4,8 +4,8 @@
 > fonte de verdade sobre onde estamos. Decisões arquiteturais ficam em
 > `AGROCOTTON_DECISIONS_LOG.md`.
 
-**Última atualização:** 2026-04-27 (sessão da noite)
-**Fase atual:** Bot WhatsApp — state machine real implementada (texto + foto)
+**Última atualização:** 2026-04-28 (sessão admin/usuarios)
+**Fase atual:** Painel admin de usuários estável; foco volta para cron 05:30 + Dashboard Admin completo
 **Próximo marco:** Cron 05:30 ativo no pg_cron + teste end-to-end com operador real
 
 > **Nota (ADR-011):** o checklist agora tem **11 itens**, não 10. O novo #1 é
