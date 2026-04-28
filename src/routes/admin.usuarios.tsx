@@ -165,6 +165,7 @@ function Shell() {
         _role: form.role,
         _morning_time: morningTimeWithSec,
         _morning_enabled: form.morning_enabled,
+        _active: form.active,
       });
       setSaving(false);
       if (error) {
@@ -179,6 +180,7 @@ function Shell() {
         _role: form.role,
         _morning_time: morningTimeWithSec,
         _morning_enabled: form.morning_enabled,
+        _active: form.active,
       });
       setSaving(false);
       if (error) {
