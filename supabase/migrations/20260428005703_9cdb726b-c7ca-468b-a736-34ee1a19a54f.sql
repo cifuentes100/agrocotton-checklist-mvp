@@ -1,0 +1,1 @@
+INSERT INTO public.users (name, phone, role) VALUES ('Esposa', '+5562991299413', 'operador');
