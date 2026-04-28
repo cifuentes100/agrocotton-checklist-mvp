@@ -1,0 +1,1 @@
+UPDATE public.checklist_runs SET status = 'cancelled', finished_at = now() WHERE id IN ('d3a2b234-bcdf-4cd6-9ad0-f17fa8ec467b'::uuid, 'b655a081-5e2b-4915-af73-9ca6ac69742f'::uuid);
