@@ -334,6 +334,24 @@ export type Database = {
         }
         Relationships: []
       }
+      morning_dispatches: {
+        Row: {
+          dispatched_at: string
+          dispatched_on: string
+          user_id: string
+        }
+        Insert: {
+          dispatched_at?: string
+          dispatched_on: string
+          user_id: string
+        }
+        Update: {
+          dispatched_at?: string
+          dispatched_on?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       refusals: {
         Row: {
           created_at: string | null
@@ -370,6 +388,8 @@ export type Database = {
         Row: {
           created_at: string | null
           id: string
+          morning_enabled: boolean
+          morning_time: string
           name: string
           phone: string
           role: string
@@ -377,6 +397,8 @@ export type Database = {
         Insert: {
           created_at?: string | null
           id?: string
+          morning_enabled?: boolean
+          morning_time?: string
           name: string
           phone: string
           role: string
@@ -384,6 +406,8 @@ export type Database = {
         Update: {
           created_at?: string | null
           id?: string
+          morning_enabled?: boolean
+          morning_time?: string
           name?: string
           phone?: string
           role?: string
@@ -466,9 +490,45 @@ export type Database = {
       }
     }
     Functions: {
+      _normalize_phone: { Args: { _phone: string }; Returns: string }
+      _validate_admin: { Args: never; Returns: undefined }
       add_checklist_item: {
         Args: { _description: string; _name: string }
         Returns: number
+      }
+      admin_create_user: {
+        Args: {
+          _morning_enabled?: boolean
+          _morning_time?: string
+          _name: string
+          _phone: string
+          _role: string
+        }
+        Returns: string
+      }
+      admin_delete_user: { Args: { _id: string }; Returns: undefined }
+      admin_list_users: {
+        Args: never
+        Returns: {
+          created_at: string
+          id: string
+          morning_enabled: boolean
+          morning_time: string
+          name: string
+          phone: string
+          role: string
+        }[]
+      }
+      admin_update_user: {
+        Args: {
+          _id: string
+          _morning_enabled: boolean
+          _morning_time: string
+          _name: string
+          _phone: string
+          _role: string
+        }
+        Returns: undefined
       }
       current_role: { Args: never; Returns: string }
       move_checklist_item: {
