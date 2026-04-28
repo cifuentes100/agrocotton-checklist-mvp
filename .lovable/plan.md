@@ -1,83 +1,58 @@
-# Diagnóstico
+## Diagnóstico
 
-Dois problemas confirmados nos logs:
+Analisei o run completo (`421015cb...`) e as mensagens recebidas. O que aconteceu:
 
-**1. "Erro ao registrar resposta"** — o insert em `item_responses` é bloqueado por dois CHECK constraints da tabela:
-- `item_responses_status_check`: só aceita `'ok'` ou `'nok'` (bot tenta gravar `'observar'` quando o operador escreve "Está ok")
-- `item_responses_validation_status_check`: só aceita `'approved'` ou `'rejected'` (bot usa `'pending_photo'` como flag de estado parcial)
+1. Às **23:43:49** um run foi iniciado (provavelmente o "tomatoma" anterior).
+2. A primeira pergunta (Cool Gard) provavelmente falhou em entregar a foto de referência — talvez o deploy novo do `sendItemQuestion` ainda não estava ativo, ou a primeira mensagem caiu. O operador respondeu "ok", "Está ok" e mandou uma foto, mas **nada foi gravado** no item 1 nesse momento (suspeito que houve falha silenciosa, ou o webhook não casou os textos com nenhum estado válido).
+3. Às **23:59:18** o operador, sem ver a foto de referência, mandou **"tomatoma"** de novo achando que ia reiniciar.
+4. Como já existia run ativa (`status='in_progress'`), o bot tratou "tomatoma" como **resposta de texto livre** do item 1 → gravou `status='observar', observation='tomatoma'` e pediu foto. Daí em diante o fluxo seguiu correto e as 11 fotos de referência seguintes vieram normalmente.
 
-**2. Foto de referência não chega** — o bot nunca envia a foto de referência. A pergunta vem só com texto, sem a imagem do item correto pra comparação.
+**Evidência:** `item_responses` do item 1 tem `observation: 'tomatoma'`, `answered_at: 23:59:19` — exatamente o segundo da mensagem "tomatoma".
 
-# O que vamos fazer
+## Causa raiz
 
-## Etapa 1 — Migration: relaxar constraints
+O gatilho `tomatoma` **não tem prioridade** sobre uma run ativa. Hoje o código só checa `tomatoma` quando `!run`. Se já tem run em andamento (perdida, esquecida, no estado errado), o operador não consegue reiniciar — a palavra vira observação.
 
-Substituir os dois CHECKs:
-- `status` passa a aceitar: `ok`, `nok`, `observar`
-- `validation_status` passa a aceitar: `approved`, `rejected`, `pending_photo` (e `null`)
+## Plano de correção
 
-## Etapa 2 — Enviar foto de referência junto da pergunta
+### 1. `tomatoma` sempre reseta o fluxo (com proteção)
 
-Quando o bot manda `[N/total] Item X` (na intro do checklist e a cada próximo item), buscar a foto de referência e enviar como **imagem** com o texto da pergunta na **caption**.
+No `handleBotMessage` (`src/lib/whatsapp-bot-logic.ts`):
 
-Ordem de prioridade pra encontrar a foto:
-1. `machine_reference_photos` (path específico daquela máquina + item) — preferencial
-2. `checklist_items.reference_correct_path` (fallback genérico do catálogo)
-3. Se não tiver nenhuma, manda só texto (comportamento atual)
+- Antes do passo 4 (sem run), adicionar: **se a mensagem for exatamente `tomatoma` E já existe run ativa**, o bot:
+  - Marca a run ativa como `status='cancelled'` (vamos aceitar 'cancelled' no constraint, ver passo 3) com `finished_at=now()`.
+  - Responde: "Reiniciando seu checklist… 🤠"
+  - Continua o fluxo como se não houvesse run ativa (cria novo run, manda "Olá operador", envia primeira pergunta com foto de referência).
 
-A foto é puxada do bucket privado `reference-photos` via signed URL (válida por 10min) e enviada pelo endpoint `https://gate.whapi.cloud/messages/image` da whapi.
+Isso resolve o caso em que o operador fica preso e quer recomeçar.
 
-## Etapa 3 — Resposta "Está ok" deve virar `ok`
+### 2. Logar mensagens **outbound** do bot
 
-Hoje "Está ok" cai em `observar` (status só aceita match exato `ok`/`nok`). Vou tornar a detecção mais tolerante:
-- Se a mensagem **contém** `ok` (e não tem `nok`/negação) → `status='ok'`
-- Se contém `nok` ou negação → `status='nok'`
-- Caso contrário → `status='observar'` com o texto na `observation`
+Hoje só temos inbound em `whatsapp_messages`. Adicionar `INSERT` em `whatsapp_messages` (`direction='outbound'`) dentro de `sendWhatsAppMessage` e `sendWhatsAppImage` para conseguirmos depurar quando algo não chega no celular do operador. Salvar `body`, `phone`, `message_type` ('text' ou 'image') e qualquer erro.
 
-Exemplos:
-- `ok`, `Ok`, `Está ok`, `tá ok` → `ok`
-- `nok`, `não ok`, `não tá ok` → `nok`
-- `tem vazamento` → `observar`
+### 3. Migração: aceitar `cancelled` no `checklist_runs.status`
 
-# Detalhes técnicos
-
-**Migration (etapa 1):**
 ```sql
-alter table public.item_responses drop constraint item_responses_status_check;
-alter table public.item_responses add constraint item_responses_status_check
-  check (status = any (array['ok','nok','observar']));
-
-alter table public.item_responses drop constraint item_responses_validation_status_check;
-alter table public.item_responses add constraint item_responses_validation_status_check
-  check (validation_status is null or validation_status = any (array['approved','rejected','pending_photo']));
+ALTER TABLE public.checklist_runs DROP CONSTRAINT IF EXISTS checklist_runs_status_check;
+ALTER TABLE public.checklist_runs ADD CONSTRAINT checklist_runs_status_check
+  CHECK (status = ANY (ARRAY['in_progress','completed','cancelled']));
 ```
 
-**Código (etapas 2 e 3) — `src/lib/whatsapp-bot-logic.ts`:**
+(Verificar se já existe esse check; se não existir, adicionar.)
 
-- Nova função `sendWhatsAppImage(to, imageUrl, caption)` chamando `gate.whapi.cloud/messages/image`.
-- Nova função `sendItemQuestion(phone, runMachineId, itemNumber, total, item)` que:
-  1. Busca `machine_reference_photos` por `(machine_id, item_id)`; se não houver, usa `item.reference_correct_path`.
-  2. Se tem path: gera signed URL no bucket `reference-photos` (10min) e manda como imagem com a pergunta na caption.
-  3. Se não tem: envia só `formatQuestion(...)` como texto (comportamento atual).
-- Substituir as três chamadas atuais que mandam pergunta:
-  - intro do checklist (`bot:run_started`)
-  - próximo item após foto (`bot:next_question`)
-  - reforço quando recebeu foto fora de hora (manter texto puro)
-- Refatorar a parsing de status:
-  ```ts
-  const lower = trimmed.toLowerCase();
-  const hasNok = /\bnok\b|n[ãa]o\s*(t[áa]\s*)?ok|n[ãa]o\s*est[áa]\s*ok/.test(lower);
-  const hasOk = /\bok\b/.test(lower);
-  if (hasNok) status = "nok";
-  else if (hasOk) status = "ok";
-  else { status = "observar"; observation = trimmed; }
-  ```
+### 4. Limpar o run de teste (opcional, recomendado)
 
-**Não muda:** state machine, anti-duplicata 12h, gatilho `tomatoma`, fluxo de foto do operador, RLS, bucket `checklist-photos`.
+Para o operador conseguir testar de novo agora sem esperar 12h de cooldown, marcar o run completed atual como `cancelled` via migração, **OU** simplesmente esperar o cooldown passar. Recomendo limpar via SQL pra destravar o teste.
 
-# Como verificar depois
+## Detalhes técnicos
 
-1. Operador manda `tomatoma` → recebe **imagem** do item 1 (foto de referência) com a pergunta na caption.
-2. Operador responde `ok` ou `Está ok` → bot pede a foto do operador (sem erro).
-3. Operador manda foto → bot manda imagem do item 2 com a pergunta. E assim até o item 12.
-4. No banco: `item_responses` ganha registros com `status` em {ok, nok, observar} e `validation_status='pending_photo'` durante a espera, virando `null` após a foto chegar.
+- Arquivo principal: `src/lib/whatsapp-bot-logic.ts`
+- A lógica de gatilho `tomatoma` move para **antes** da checagem de run ativa.
+- O log outbound não pode quebrar o fluxo: usar try/catch silencioso.
+- Após aprovado, **republicar** pra ativar o webhook novo.
+
+## Resultado esperado
+
+- Operador pode mandar `tomatoma` a qualquer momento e sempre reinicia.
+- Conseguimos auditar exatamente o que o bot enviou (texto + imagem) por número.
+- Próximo teste vai ter "Olá operador… iniciando checklist" + foto de referência do Cool Gard como primeira mensagem.
