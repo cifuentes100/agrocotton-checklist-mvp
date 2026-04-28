@@ -303,6 +303,33 @@ export async function handleBotMessage(
     return "bot:not_registered";
   }
 
+  // 1.5. KILL: encerra qualquer run ativa sem iniciar nova (útil para testes).
+  if (inbound.kind === "text" && inbound.text.trim().toLowerCase() === "kill") {
+    const { data: activeRun } = await db
+      .from("checklist_runs")
+      .select("id")
+      .eq("operator_id", user.id)
+      .eq("status", "in_progress")
+      .maybeSingle();
+
+    if (activeRun) {
+      await db
+        .from("checklist_runs")
+        .update({ status: "cancelled", finished_at: new Date().toISOString() })
+        .eq("id", activeRun.id);
+      await sendWhatsAppMessage(
+        fromPhone,
+        `🛑 Checklist cancelado, ${user.name}. Manda *tomatoma* pra começar de novo.`,
+      );
+      return "bot:killed";
+    }
+    await sendWhatsAppMessage(
+      fromPhone,
+      `ℹ️ Você não tem checklist em andamento, ${user.name}.`,
+    );
+    return "bot:kill_noop";
+  }
+
   // 2. Run ativa?
   const { data: runData } = await db
     .from("checklist_runs")
