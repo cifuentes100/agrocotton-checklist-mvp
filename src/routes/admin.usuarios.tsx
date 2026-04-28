@@ -43,7 +43,7 @@ import { toast } from "sonner";
 import { Loader2, Pencil, Plus, Send, Trash2 } from "lucide-react";
 import { triggerMorningNow } from "@/server/morning.functions";
 
-export const Route = createFileRoute("/admin/usuarios")({
+export const Route = createFileRoute("/admin/usuarios" as never)({
   component: AdminUsuariosPage,
   head: () => ({
     meta: [{ title: "Usuários — Admin AgroCotton" }],
