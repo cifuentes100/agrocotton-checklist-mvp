@@ -394,24 +394,9 @@ export async function handleBotMessage(
       return "bot:awaiting_trigger";
     }
 
-    const since = new Date(
-      Date.now() - COOLDOWN_HOURS * 60 * 60 * 1000,
-    ).toISOString();
-    const { data: recent } = await db
-      .from("checklist_runs")
-      .select("id, finished_at")
-      .eq("operator_id", user.id)
-      .eq("status", "completed")
-      .gte("finished_at", since)
-      .limit(1);
-
-    if (recent && recent.length > 0) {
-      await sendWhatsAppMessage(
-        fromPhone,
-        `✅ Checklist de hoje já foi concluído, ${user.name}. Valeu cavalo! 🤠\nNovo checklist liberado em até ${COOLDOWN_HOURS}h.`,
-      );
-      return "bot:cooldown_active";
-    }
+    // NOTE: cooldown de 12h removido do caminho do `tomatoma` — gatilho manual
+    // sempre força reinício (útil para demo/validação). O cooldown natural
+    // continua existindo via mensagem automática "bom dia" (1x/dia).
 
     const { data: machine } = await db
       .from("machines")
