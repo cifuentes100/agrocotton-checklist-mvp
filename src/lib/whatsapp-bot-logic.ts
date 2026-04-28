@@ -38,9 +38,33 @@ export type WhatsAppInbound =
 
 // -------------------- WhatsApp send helpers --------------------
 
+/** Loga mensagem outbound em whatsapp_messages (best-effort, nunca bloqueia o fluxo). */
+async function logOutbound(
+  phone: string,
+  messageType: "text" | "image",
+  body: string | null,
+  status: "sent" | "error",
+  error: string | null,
+) {
+  try {
+    const db = supabaseAdmin as any;
+    await db.from("whatsapp_messages").insert({
+      direction: "outbound",
+      phone,
+      message_type: messageType,
+      body,
+      status,
+      error,
+    });
+  } catch (e) {
+    console.error("[wa-bot] failed to log outbound:", e);
+  }
+}
+
 export async function sendWhatsAppMessage(to: string, text: string) {
   const token = process.env.WHAPI_TOKEN;
   if (!token) {
+    await logOutbound(to, "text", text, "error", "WHAPI_TOKEN not configured");
     return { ok: false, error: "WHAPI_TOKEN not configured" };
   }
   try {
@@ -60,15 +84,16 @@ export async function sendWhatsAppMessage(to: string, text: string) {
       console.error(
         `[wa-bot] send failed [${res.status}]: ${responseText}`,
       );
+      await logOutbound(to, "text", text, "error", `${res.status}: ${responseText.slice(0, 500)}`);
       return { ok: false, error: `${res.status}: ${responseText}` };
     }
+    await logOutbound(to, "text", text, "sent", null);
     return { ok: true, response: responseText };
   } catch (err) {
     console.error("[wa-bot] send exception:", err);
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
+    const msg = err instanceof Error ? err.message : String(err);
+    await logOutbound(to, "text", text, "error", msg);
+    return { ok: false, error: msg };
   }
 }
 
@@ -83,7 +108,11 @@ export async function sendWhatsAppImage(
   caption?: string,
 ) {
   const token = process.env.WHAPI_TOKEN;
-  if (!token) return { ok: false, error: "WHAPI_TOKEN not configured" };
+  const logBody = caption ? `[image] ${caption}` : `[image] ${imageUrl}`;
+  if (!token) {
+    await logOutbound(to, "image", logBody, "error", "WHAPI_TOKEN not configured");
+    return { ok: false, error: "WHAPI_TOKEN not configured" };
+  }
   try {
     const res = await fetch("https://gate.whapi.cloud/messages/image", {
       method: "POST",
@@ -102,15 +131,16 @@ export async function sendWhatsAppImage(
       console.error(
         `[wa-bot] image send failed [${res.status}]: ${responseText}`,
       );
+      await logOutbound(to, "image", logBody, "error", `${res.status}: ${responseText.slice(0, 500)}`);
       return { ok: false, error: `${res.status}: ${responseText}` };
     }
+    await logOutbound(to, "image", logBody, "sent", null);
     return { ok: true, response: responseText };
   } catch (err) {
     console.error("[wa-bot] image send exception:", err);
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
+    const msg = err instanceof Error ? err.message : String(err);
+    await logOutbound(to, "image", logBody, "error", msg);
+    return { ok: false, error: msg };
   }
 }
 
@@ -274,7 +304,7 @@ export async function handleBotMessage(
   }
 
   // 2. Run ativa?
-  const { data: run } = await db
+  const { data: runData } = await db
     .from("checklist_runs")
     .select("id, machine_id, started_at, status")
     .eq("operator_id", user.id)
@@ -282,6 +312,7 @@ export async function handleBotMessage(
     .order("started_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  let run: { id: string; machine_id: string; started_at: string; status: string } | null = runData ?? null;
 
   // 3. Catálogo
   const { data: items, error: itemsErr } = await db
@@ -297,6 +328,27 @@ export async function handleBotMessage(
     return "bot:no_items";
   }
   const total = items.length;
+
+  // 3.5. RESET: se operador mandar "tomatoma" exato e já tiver run ativa,
+  // cancela a run atual e segue como se não houvesse run (vai criar nova).
+  // Isso destrava casos em que o operador ficou perdido no meio do fluxo.
+  const isResetTrigger =
+    inbound.kind === "text" && inbound.text.trim().toLowerCase() === "tomatoma";
+  if (run && isResetTrigger) {
+    await db
+      .from("checklist_runs")
+      .update({
+        status: "cancelled",
+        finished_at: new Date().toISOString(),
+      })
+      .eq("id", run.id);
+    await sendWhatsAppMessage(
+      fromPhone,
+      `🔄 Reiniciando seu checklist, ${user.name}… 🤠`,
+    );
+    // Deixa fluxo seguir como "sem run", o bloco abaixo vai criar uma nova.
+    run = null;
+  }
 
   // 4. Sem run ativa → exige gatilho explícito "tomatoma" + cooldown 12h + abre nova
   if (!run) {
