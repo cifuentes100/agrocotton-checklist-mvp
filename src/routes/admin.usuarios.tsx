@@ -57,6 +57,7 @@ type ManagedUser = {
   role: string;
   morning_time: string; // "HH:MM:SS"
   morning_enabled: boolean;
+  active: boolean;
   created_at: string;
 };
 
@@ -66,6 +67,7 @@ type FormState = {
   role: string;
   morning_time: string; // "HH:MM"
   morning_enabled: boolean;
+  active: boolean;
 };
 
 const ROLES = [
@@ -82,6 +84,7 @@ function emptyForm(): FormState {
     role: "operador",
     morning_time: "05:30",
     morning_enabled: true,
+    active: true,
   };
 }
 
@@ -138,6 +141,7 @@ function Shell() {
       role: u.role,
       morning_time: timeToHHMM(u.morning_time),
       morning_enabled: u.morning_enabled,
+      active: u.active,
     });
     setDialogOpen(true);
   };
@@ -161,6 +165,7 @@ function Shell() {
         _role: form.role,
         _morning_time: morningTimeWithSec,
         _morning_enabled: form.morning_enabled,
+        _active: form.active,
       });
       setSaving(false);
       if (error) {
@@ -175,6 +180,7 @@ function Shell() {
         _role: form.role,
         _morning_time: morningTimeWithSec,
         _morning_enabled: form.morning_enabled,
+        _active: form.active,
       });
       setSaving(false);
       if (error) {
@@ -297,7 +303,11 @@ function Shell() {
                 {users.map((u) => (
                   <TableRow
                     key={u.id}
-                    className="border-slate-800 hover:bg-slate-800/40"
+                    className={
+                      u.active
+                        ? "border-slate-800 hover:bg-slate-800/40"
+                        : "border-slate-800 opacity-60 hover:bg-slate-800/40"
+                    }
                   >
                     <TableCell className="font-medium text-slate-100">
                       {u.name}
@@ -307,17 +317,25 @@ function Shell() {
                       {u.role}
                     </TableCell>
                     <TableCell className="text-slate-300">
-                      {timeToHHMM(u.morning_time)}
+                      <span
+                        className={
+                          u.morning_enabled
+                            ? "text-slate-300"
+                            : "text-slate-500 line-through"
+                        }
+                      >
+                        {timeToHHMM(u.morning_time)}
+                      </span>
                     </TableCell>
                     <TableCell>
                       <span
                         className={
-                          u.morning_enabled
-                            ? "text-emerald-400"
-                            : "text-slate-500"
+                          u.active
+                            ? "rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-400"
+                            : "rounded-full bg-slate-700/50 px-2 py-0.5 text-xs font-medium text-slate-400"
                         }
                       >
-                        {u.morning_enabled ? "Sim" : "Não"}
+                        {u.active ? "Ativo" : "Inativo"}
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
@@ -428,6 +446,22 @@ function Shell() {
                     {form.morning_enabled ? "Recebe bom-dia" : "Pausado"}
                   </span>
                 </div>
+              </div>
+            </div>
+            <div className="space-y-2 rounded-md border border-slate-800 bg-slate-800/40 p-3">
+              <Label>Usuário ativo</Label>
+              <div className="flex items-center">
+                <Switch
+                  checked={form.active}
+                  onCheckedChange={(v) =>
+                    setForm((f) => ({ ...f, active: v }))
+                  }
+                />
+                <span className="ml-3 text-sm text-slate-400">
+                  {form.active
+                    ? "Bot interage normalmente"
+                    : "Bot ignora 100% (sem bom-dia, sem resposta a mensagens)"}
+                </span>
               </div>
             </div>
           </div>

@@ -404,6 +404,7 @@ export type Database = {
       }
       users: {
         Row: {
+          active: boolean
           created_at: string | null
           id: string
           morning_enabled: boolean
@@ -413,6 +414,7 @@ export type Database = {
           role: string
         }
         Insert: {
+          active?: boolean
           created_at?: string | null
           id?: string
           morning_enabled?: boolean
@@ -422,6 +424,7 @@ export type Database = {
           role: string
         }
         Update: {
+          active?: boolean
           created_at?: string | null
           id?: string
           morning_enabled?: boolean
@@ -516,6 +519,7 @@ export type Database = {
       }
       admin_create_user: {
         Args: {
+          _active?: boolean
           _morning_enabled?: boolean
           _morning_time?: string
           _name: string
@@ -528,6 +532,7 @@ export type Database = {
       admin_list_users: {
         Args: never
         Returns: {
+          active: boolean
           created_at: string
           id: string
           morning_enabled: boolean
@@ -539,6 +544,7 @@ export type Database = {
       }
       admin_update_user: {
         Args: {
+          _active: boolean
           _id: string
           _morning_enabled: boolean
           _morning_time: string
