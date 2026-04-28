@@ -48,9 +48,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!mounted) return;
       const nextUser = session?.user ?? null;
       setUser(nextUser);
+      // Garante liberação do loading mesmo se getSession() ficar pendente
+      // (workaround para deadlock conhecido do supabase-js v2 em StrictMode/SSR).
+      setLoading(false);
 
       if (nextUser) {
-        // Defer fetch to avoid deadlock dentro do callback
+        // Defer fetch para evitar deadlock dentro do callback
         setTimeout(async () => {
           const r = await fetchRole(nextUser.id);
           if (!mounted) return;
