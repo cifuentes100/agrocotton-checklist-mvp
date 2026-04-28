@@ -847,6 +847,39 @@ const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
 
 ---
 
+## ADR-024 — Flexibilizar RF-03: foto só em NOK / texto livre
+
+**Data:** 2026-04-28
+**Status:** ✅ Aceita e implementada
+
+**Contexto:**
+RF-03 original exigia foto em **todos** os 12 itens do checklist. Na prática
+isso torna o fluxo do operador lento (12 fotos por dia, mesmo quando está
+tudo certo) e gera evidência redundante para itens visivelmente OK comparados
+à foto de referência. Alternativas avaliadas: (a) foto só em NOK; (b) foto
+opcional sempre; (c) manter como estava.
+
+**Decisão:**
+Operador responde `ok` → item fecha imediatamente sem foto e o bot já manda a
+próxima pergunta. Respostas `nok` ou texto livre continuam exigindo foto. A
+foto de referência continua sendo enviada **junto com toda pergunta** para o
+operador comparar antes de responder.
+
+**Consequências:**
+- Fluxo de checklist 100% OK fica ~2× mais rápido (12 mensagens em vez de 24).
+- Evidência fotográfica concentrada onde há divergência. Fila do mecânico só
+  recebe NOK (já era o caso, query já filtrava `status='nok'`).
+- `item_responses.photo_path` passa a ser `''` para itens OK. Nenhum schema
+  change necessário (coluna já é `NOT NULL DEFAULT ''`).
+- Histórico do mecânico não exibe foto, então também não é afetado.
+- Confiança transferida do "ver foto" para "operador disse ok" — aceitável
+  porque o operador acabou de ver a foto de referência ao receber a pergunta.
+
+**Supersedes:** parcialmente RF-03 (foto continua obrigatória apenas em
+respostas `nok` e texto livre).
+
+---
+
 ## 📝 Template para próximas decisões
 
 ```
