@@ -42,15 +42,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     let mounted = true;
+    console.log("[Auth] mount");
 
     // Listener PRIMEIRO, depois getSession (guideline Supabase)
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
+      console.log("[Auth] onAuthStateChange", event, !!session);
       const nextUser = session?.user ?? null;
       setUser(nextUser);
+      // Garante que loading nunca trava: ao receber qualquer evento, libera UI
+      setLoading(false);
 
       if (nextUser) {
-        // Defer fetch to avoid deadlock dentro do callback
+        // Defer fetch para evitar deadlock dentro do callback
         setTimeout(async () => {
           const r = await fetchRole(nextUser.id);
           if (!mounted) return;
@@ -69,7 +73,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     (async () => {
       try {
+        console.log("[Auth] getSession start");
         const { data } = await supabase.auth.getSession();
+        console.log("[Auth] getSession done", !!data.session);
         const session: Session | null = data.session;
         if (!mounted) return;
         const nextUser = session?.user ?? null;
@@ -87,12 +93,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } catch (error) {
-        console.error("Erro ao carregar sessão", error);
+        console.error("[Auth] erro ao carregar sessão", error);
         if (!mounted) return;
         setUser(null);
         setRole(null);
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted) {
+          console.log("[Auth] setLoading(false)");
+          setLoading(false);
+        }
       }
     })();
 
