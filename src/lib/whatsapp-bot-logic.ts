@@ -295,11 +295,9 @@ export async function handleBotMessage(
     .maybeSingle();
 
   if (!user) {
-    await sendWhatsAppMessage(
-      fromPhone,
-      "👋 Olá! Seu número não está cadastrado como operador. Procure o responsável.",
-    );
-    return "bot:not_registered";
+    // Silêncio total: número não cadastrado não recebe nenhuma resposta/ação.
+    // A mensagem recebida ainda fica registrada em `whatsapp_messages` pelo webhook.
+    return "bot:not_registered_silent";
   }
 
   // 1.5. KILL: encerra qualquer run ativa sem iniciar nova (útil para testes).

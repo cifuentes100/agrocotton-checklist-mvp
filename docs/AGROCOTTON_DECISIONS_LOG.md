@@ -901,3 +901,18 @@ O que foi decidido, em uma ou duas frases diretas.
 
 **Supersedes:** ADR-XXX (se aplicável)
 ```
+
+---
+
+## ADR — Bot silencia números não cadastrados
+
+**Data:** 2026-04-28
+**Status:** Aceito
+
+**Contexto:** O bot do WhatsApp respondia "Seu número não está cadastrado como operador..." para qualquer número desconhecido que mandasse mensagem. Isso gerava ruído e expunha a existência do bot a contatos aleatórios.
+
+**Decisão:** Quando uma mensagem chega de telefone que não existe em `users` (ou existe mas não tem `role='operador'`), o bot **não responde nada**. A mensagem continua registrada em `whatsapp_messages` para auditoria, mas nenhuma ação é disparada.
+
+**Local:** `src/lib/whatsapp-bot-logic.ts`, `handleBotMessage`, branch `if (!user)`.
+
+**Trade-offs aceitos:** Operador novo cadastrado errado (ex.: telefone com dígito trocado) não recebe nenhum feedback do bot. Mitigação: admin valida cadastro pela tela `/admin/usuarios` e pelo log de `whatsapp_messages`.
