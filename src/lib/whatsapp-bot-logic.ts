@@ -356,9 +356,12 @@ export async function handleBotMessage(
     // Imagem ou qualquer outro texto recebe orientação e NADA é gravado no banco.
     const isTrigger = inbound.kind === "text" && inbound.text === "tomatoma";
     const isFernando = phoneWithPlus === "+5562999549759";
+    const isEsposa = phoneWithPlus === "+5562991299413";
     if (!isTrigger) {
       const greeting = isFernando
         ? `Você por aqui patrãozinho? É o Fernando, vai querer testar o bot agora! 🤠 Manda *tomatoma* (em minúsculas) pra começar.`
+        : isEsposa
+        ? `Você por aqui Mulé? 💛 Manda *tomatoma* (em minúsculas) pra começar o checklist.`
         : `Olá, ${user.name}! 🤠 Para iniciar o checklist, envie a palavra *tomatoma* (exatamente assim, em minúsculas).`;
       await sendWhatsAppMessage(fromPhone, greeting);
       return "bot:awaiting_trigger";
