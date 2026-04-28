@@ -1,45 +1,34 @@
-## Atualização da documentação do projeto
+## Objetivo
+Fazer com que a palavra `tomatoma` **sempre force o reinício** do checklist do operador — ignorando o cooldown de 12h e cancelando qualquer run em andamento. Isso destrava a demo (e qualquer teste) sem precisar mexer no banco entre uma rodada e outra.
 
-A última atualização dos documentos é de **2026-04-27 (noite)**. Desde então, ocorreram duas sessões relevantes (correção do `/admin/usuarios` + limpeza do cache do Vite + ajuste no `AuthContext`) que ainda não estão registradas. A documentação ficará desatualizada se a próxima sessão começar sem isso registrado.
+## Comportamento atual vs. novo
 
-### O que vou atualizar
+| Situação ao receber `tomatoma` | Hoje | Depois |
+|---|---|---|
+| Sem run + sem checklist nas últimas 12h | Inicia novo ✅ | Inicia novo ✅ |
+| Sem run + checklist concluído há < 12h | **Bloqueia** com "checklist de hoje já foi feito" ❌ | **Inicia novo** ✅ |
+| Com run em andamento | Cancela a anterior e inicia nova ✅ | Cancela a anterior e inicia nova ✅ |
+| Qualquer outra mensagem (texto/foto que não seja `tomatoma`) sem run ativa | Pede pra mandar `tomatoma` | **Igual** (cooldown continua valendo se a pessoa não mandar o gatilho) |
 
-**1. `docs/AGROCOTTON_STATUS.md`**
-- Carimbo: `Última atualização: 2026-04-28`
-- Trocar "Fase atual" para refletir que o painel admin de usuários está agora estável e o foco volta para o cron 05:30 + Dashboard Admin
-- Em **Aplicação Web**: marcar como `[x]` o subitem "CRUD usuários (Gerenciar usuários)" dentro do Dashboard Admin (parcial), mantendo Dashboard Admin global como `[ ]`
-- Em **Próximos passos imediatos**: remover/atualizar o item de cron e reordenar com base no estado real
-- Adicionar nota curta em "Pontos de atenção" sobre a regra: **server-only imports em `src/server/*.functions.ts` devem ser dinâmicos dentro do `.handler()`** (vira ADR-022, ver abaixo)
+Resumindo em linguagem simples: **`tomatoma` vira o "botão de reset"**. Se o operador escrever isso, o sistema sempre começa do zero — não importa se ele acabou de terminar um.
 
-**2. `docs/AGROCOTTON_DECISIONS_LOG.md`** — adicionar dois novos ADRs:
+## O que muda no código
 
-- **ADR-022 — Server functions: imports server-only devem ser dinâmicos dentro do `.handler()`**
-  Contexto: o botão "Gerenciar usuários" não abria por conta de `whatsapp-bot-logic` + `client.server` vazando para o bundle do cliente via import estático no topo de `morning.functions.ts`.
-  Decisão: qualquer arquivo em `src/server/*.functions.ts` que dependa de `client.server`, `process.env` server-only, ou libs Node-only **deve** importar essas dependências via `await import(...)` dentro do `.handler()`. Imports estáticos no topo só para tipos e utilitários cliente-safe.
-  Consequências: previne classe inteira de bugs de "tela em branco / botão não abre nada"; obriga revisão de qualquer novo server function antes do merge.
+Arquivo único: `src/lib/whatsapp-bot-logic.ts`, função `handleBotMessage`.
 
-- **ADR-023 — `AuthContext`: liberar `loading` no evento `INITIAL_SESSION`**
-  Contexto: em dev/HMR, `supabase.auth.getSession()` pode pendurar a Promise, deixando `ProtectedRoute` eternamente em "Carregando…". Observado ao testar `/admin/usuarios` após limpar o cache do Vite.
-  Decisão: o listener `onAuthStateChange` no `AuthContext` chama `setLoading(false)` imediatamente ao receber qualquer evento (incluindo `INITIAL_SESSION`), independente do `getSession()` resolver. Esse é o caminho oficial recomendado pela equipe Supabase para SPAs com SSR.
-  Consequências: garante que a UI sempre sai do spinner; o fetch de role continua assíncrono em background.
+Pequena mudança no bloco "4. Sem run ativa":
+- Hoje, depois de validar o gatilho `tomatoma`, o código consulta `checklist_runs` das últimas 12h e bloqueia se achar uma `completed`.
+- Vamos **remover essa checagem do caminho do `tomatoma`**. O cooldown de 12h continua existindo de fato (ele já é aplicado naturalmente: o operador só recebe a mensagem automática "bom dia" 1x por dia), mas o gatilho manual `tomatoma` passa por cima.
 
-**3. Novo `docs/CHANGELOG_2026-04-28_admin_usuarios_fix.md`**
-Resumo curto da sessão de hoje:
-- Sintoma: clicar em "Gerenciar usuários" não abria nada
-- Diagnóstico em duas camadas: (a) chunk JS abortado por server-only leak e (b) `AuthContext` deadlock no spinner
-- Ações: limpar `node_modules/.vite`, mover `import("@/lib/whatsapp-bot-logic")` para dentro do `.handler()` em `morning.functions.ts`, ajustar listener do `AuthContext`
-- Resultado: rota `/admin/usuarios` carrega; ADRs 022 e 023 registram as regras
+Nada de migration, nada de mudança de schema, nada de mexer em outros perfis.
 
-### O que NÃO vou alterar
+## Riscos
 
-- ADRs antigos (regra do projeto: ADRs são imutáveis, só se adiciona)
-- O changelog `2026-04-24_sessao_implantador.md` (sessão diferente)
-- `.lovable/plan.md` (artefato interno do diagnóstico, não documentação do projeto)
+- Operadores reais poderiam, em tese, refazer o checklist múltiplas vezes no mesmo dia se descobrirem o `tomatoma`. Como o gatilho já é conhecido (é o único jeito de iniciar), e o histórico fica todo registrado em `checklist_runs`, isso não corrompe dado — só gera mais runs. Aceitável pro estágio de MVP/demo.
 
-### Arquivos tocados
+## Validação pós-mudança
 
-- `docs/AGROCOTTON_STATUS.md` (editar)
-- `docs/AGROCOTTON_DECISIONS_LOG.md` (acrescentar ADR-022 e ADR-023 ao final, antes do template `ADR-NNN`)
-- `docs/CHANGELOG_2026-04-28_admin_usuarios_fix.md` (criar)
-
-Aprova que eu aplique?
+Manda 3x `tomatoma` em sequência do operador demo:
+1. Primeira → inicia checklist
+2. Completa o fluxo
+3. Manda `tomatoma` de novo → deve iniciar **outro** checklist imediatamente, sem aparecer "checklist de hoje já foi concluído"
