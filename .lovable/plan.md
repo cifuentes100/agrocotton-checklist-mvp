@@ -1,62 +1,45 @@
-## Diagnóstico
+## Atualização da documentação do projeto
 
-Quando você clica em "Gerenciar usuários", o navegador tenta carregar dinamicamente o chunk JS da rota `/admin/usuarios`. Esse carregamento está falhando com o erro:
+A última atualização dos documentos é de **2026-04-27 (noite)**. Desde então, ocorreram duas sessões relevantes (correção do `/admin/usuarios` + limpeza do cache do Vite + ajuste no `AuthContext`) que ainda não estão registradas. A documentação ficará desatualizada se a próxima sessão começar sem isso registrado.
 
-```
-Failed to fetch dynamically imported module: virtual:tanstack-start-client-entry
-```
+### O que vou atualizar
 
-### Causa raiz
+**1. `docs/AGROCOTTON_STATUS.md`**
+- Carimbo: `Última atualização: 2026-04-28`
+- Trocar "Fase atual" para refletir que o painel admin de usuários está agora estável e o foco volta para o cron 05:30 + Dashboard Admin
+- Em **Aplicação Web**: marcar como `[x]` o subitem "CRUD usuários (Gerenciar usuários)" dentro do Dashboard Admin (parcial), mantendo Dashboard Admin global como `[ ]`
+- Em **Próximos passos imediatos**: remover/atualizar o item de cron e reordenar com base no estado real
+- Adicionar nota curta em "Pontos de atenção" sobre a regra: **server-only imports em `src/server/*.functions.ts` devem ser dinâmicos dentro do `.handler()`** (vira ADR-022, ver abaixo)
 
-A rota `src/routes/admin.usuarios.tsx` importa, no topo do arquivo:
+**2. `docs/AGROCOTTON_DECISIONS_LOG.md`** — adicionar dois novos ADRs:
 
-```ts
-import { triggerMorningNow } from "@/server/morning.functions";
-```
+- **ADR-022 — Server functions: imports server-only devem ser dinâmicos dentro do `.handler()`**
+  Contexto: o botão "Gerenciar usuários" não abria por conta de `whatsapp-bot-logic` + `client.server` vazando para o bundle do cliente via import estático no topo de `morning.functions.ts`.
+  Decisão: qualquer arquivo em `src/server/*.functions.ts` que dependa de `client.server`, `process.env` server-only, ou libs Node-only **deve** importar essas dependências via `await import(...)` dentro do `.handler()`. Imports estáticos no topo só para tipos e utilitários cliente-safe.
+  Consequências: previne classe inteira de bugs de "tela em branco / botão não abre nada"; obriga revisão de qualquer novo server function antes do merge.
 
-Esse arquivo (`src/server/morning.functions.ts`) importa `@/lib/whatsapp-bot-logic`, que por sua vez importa `@/integrations/supabase/client.server` — um módulo **exclusivo de servidor** que lê `SUPABASE_SERVICE_ROLE_KEY` do `process.env` e usa o cliente admin do Supabase (bypass de RLS).
+- **ADR-023 — `AuthContext`: liberar `loading` no evento `INITIAL_SESSION`**
+  Contexto: em dev/HMR, `supabase.auth.getSession()` pode pendurar a Promise, deixando `ProtectedRoute` eternamente em "Carregando…". Observado ao testar `/admin/usuarios` após limpar o cache do Vite.
+  Decisão: o listener `onAuthStateChange` no `AuthContext` chama `setLoading(false)` imediatamente ao receber qualquer evento (incluindo `INITIAL_SESSION`), independente do `getSession()` resolver. Esse é o caminho oficial recomendado pela equipe Supabase para SPAs com SSR.
+  Consequências: garante que a UI sempre sai do spinner; o fetch de role continua assíncrono em background.
 
-No TanStack Start, o handler de `createServerFn` é removido do bundle do cliente, **mas as importações de nível superior do arquivo do server function permanecem na cadeia**. Quando o cliente tenta carregar a rota, o bundler arrasta `whatsapp-bot-logic.ts` (731 linhas de lógica de servidor) e `client.server.ts` para o chunk do cliente, o que quebra a montagem do módulo virtual da rota e causa o "Failed to fetch dynamically imported module".
+**3. Novo `docs/CHANGELOG_2026-04-28_admin_usuarios_fix.md`**
+Resumo curto da sessão de hoje:
+- Sintoma: clicar em "Gerenciar usuários" não abria nada
+- Diagnóstico em duas camadas: (a) chunk JS abortado por server-only leak e (b) `AuthContext` deadlock no spinner
+- Ações: limpar `node_modules/.vite`, mover `import("@/lib/whatsapp-bot-logic")` para dentro do `.handler()` em `morning.functions.ts`, ajustar listener do `AuthContext`
+- Resultado: rota `/admin/usuarios` carrega; ADRs 022 e 023 registram as regras
 
-Esse é exatamente o tipo de erro que aparece como tela em branco / botão que "não faz nada" — porque o `<Link>`/`navigate` dispara o import dinâmico, ele rejeita silenciosamente, e a UI não troca.
+### O que NÃO vou alterar
 
-## Plano de correção
+- ADRs antigos (regra do projeto: ADRs são imutáveis, só se adiciona)
+- O changelog `2026-04-24_sessao_implantador.md` (sessão diferente)
+- `.lovable/plan.md` (artefato interno do diagnóstico, não documentação do projeto)
 
-1. **Isolar o server function em um arquivo dedicado e seguro para o cliente importar**
-   - Manter `src/server/morning.functions.ts` apenas com o `createServerFn` e suas dependências de tipos.
-   - Mover a importação de `sendMorningMessages` (`@/lib/whatsapp-bot-logic`) para **dentro do `.handler(...)`** usando `await import("@/lib/whatsapp-bot-logic")` (import dinâmico). Assim o módulo de servidor pesado nunca entra no grafo do cliente.
+### Arquivos tocados
 
-2. **Validar que o chunk da rota carrega**
-   - Após o ajuste, abrir `/admin/usuarios` direto pela URL e via botão "Gerenciar usuários" para confirmar.
+- `docs/AGROCOTTON_STATUS.md` (editar)
+- `docs/AGROCOTTON_DECISIONS_LOG.md` (acrescentar ADR-022 e ADR-023 ao final, antes do template `ADR-NNN`)
+- `docs/CHANGELOG_2026-04-28_admin_usuarios_fix.md` (criar)
 
-3. **Como prática geral neste projeto**: qualquer arquivo em `src/server/*.functions.ts` que use `client.server` ou libs Node-only deve fazer essas importações dinamicamente dentro do `.handler()`, nunca no topo do arquivo.
-
-## Detalhes técnicos
-
-Mudança proposta em `src/server/morning.functions.ts`:
-
-```ts
-import { createServerFn } from "@tanstack/react-start";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-
-export const triggerMorningNow = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const { supabase, userId } = context;
-
-    const { data: caller } = await supabase
-      .from("users").select("role").eq("id", userId).maybeSingle();
-
-    if (!caller || caller.role !== "admin") {
-      throw new Error("Apenas admin pode disparar bom-dia manualmente");
-    }
-
-    // Import dinâmico: mantém whatsapp-bot-logic e client.server FORA do bundle do cliente
-    const { sendMorningMessages } = await import("@/lib/whatsapp-bot-logic");
-    return await sendMorningMessages({ force: true });
-  });
-```
-
-Não é necessário alterar `admin.usuarios.tsx`, `whatsapp-bot-logic.ts` nem `client.server.ts`.
-
-Posso aplicar?
+Aprova que eu aplique?

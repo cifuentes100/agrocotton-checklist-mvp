@@ -4,8 +4,8 @@
 > fonte de verdade sobre onde estamos. Decisões arquiteturais ficam em
 > `AGROCOTTON_DECISIONS_LOG.md`.
 
-**Última atualização:** 2026-04-27 (sessão da noite)
-**Fase atual:** Bot WhatsApp — state machine real implementada (texto + foto)
+**Última atualização:** 2026-04-28 (sessão admin/usuarios)
+**Fase atual:** Painel admin de usuários estável; foco volta para cron 05:30 + Dashboard Admin completo
 **Próximo marco:** Cron 05:30 ativo no pg_cron + teste end-to-end com operador real
 
 > **Nota (ADR-011):** o checklist agora tem **11 itens**, não 10. O novo #1 é
@@ -80,6 +80,9 @@ Admin vê tudo no backlog
 - [x] Dashboard Implantador — layout + lista de máquinas + cadastro de máquinas + 12 fotos de referência por máquina (ADR-009, ADR-013)
 - [x] Dashboard Mecânico — fila de validações NOK + drawer comparativo + histórico (ADR-010)
 - [ ] Dashboard Admin (backlog + dashboard + CRUD)
+  - [x] CRUD de usuários (`/admin/usuarios`) — listagem, criação, edição de role, reset de senha; botão "Disparar bom-dia" manual
+  - [ ] Backlog consolidado de runs
+  - [ ] Dashboard com métricas (lubrificação RF-35, OK/NOK por máquina, etc.)
 
 ### Bot WhatsApp (rota Lovable + cron externo)
 - [x] Provedor WhatsApp definido: whapi.cloud (ADR-018)
@@ -129,11 +132,12 @@ ADR-008, ADR-010) e classificar os warnings pré-existentes do linter.
 
 ## 🗺️ Próximos passos imediatos
 
-1. Agendar `cron.schedule('agrocotton-morning', '30 5 * * *', ...)` no Supabase
+1. Definir e setar `WEBHOOK_SECRET` definitivo (substituir o temporário)
+2. Agendar `cron.schedule('agrocotton-morning', '30 5 * * *', ...)` no Supabase
    chamando `POST /api/public/morning-trigger?token=<WEBHOOK_SECRET>` (endpoint pronto)
-2. Teste end-to-end com operador real: "oi" → 12 itens (texto + foto) → "Vamo cavalo!"
-3. Construir Dashboard Admin (RF-35: contador de lubrificação + relatórios + CRUD usuários)
-4. Concluir verificação de RLS e catalogar findings (ADR futuro se necessário)
+3. Teste end-to-end com operador real: "oi" → 12 itens (texto + foto) → "Vamo cavalo!"
+4. Completar Dashboard Admin: backlog de runs + métricas (RF-35 contador de lubrificação)
+5. Concluir verificação de RLS e catalogar findings (ADR futuro se necessário)
 
 ---
 
@@ -165,6 +169,12 @@ ADR-008, ADR-010) e classificar os warnings pré-existentes do linter.
 - **Contador de horas de lubrificação (RF-35)**: ainda não existe fonte de dados.
   Definir: será manual (operador informa) ou integrado com a máquina? MVP provavelmente
   manual.
+- **Regra de bundling para server functions** (ADR-022): qualquer arquivo em
+  `src/server/*.functions.ts` que use `@/integrations/supabase/client.server`,
+  `process.env` server-only ou libs Node-only **deve** importar essas
+  dependências via `await import(...)` dentro do `.handler()`. Import estático
+  no topo vaza o módulo para o bundle do cliente e quebra a rota com
+  "Failed to fetch dynamically imported module".
 
 ---
 
