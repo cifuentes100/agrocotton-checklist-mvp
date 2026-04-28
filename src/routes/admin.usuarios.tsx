@@ -448,6 +448,22 @@ function Shell() {
                 </div>
               </div>
             </div>
+            <div className="space-y-2 rounded-md border border-slate-800 bg-slate-800/40 p-3">
+              <Label>Usuário ativo</Label>
+              <div className="flex items-center">
+                <Switch
+                  checked={form.active}
+                  onCheckedChange={(v) =>
+                    setForm((f) => ({ ...f, active: v }))
+                  }
+                />
+                <span className="ml-3 text-sm text-slate-400">
+                  {form.active
+                    ? "Bot interage normalmente"
+                    : "Bot ignora 100% (sem bom-dia, sem resposta a mensagens)"}
+                </span>
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button
