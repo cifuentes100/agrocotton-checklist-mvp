@@ -459,7 +459,7 @@ function Shell() {
       >
         <AlertDialogContent className="border-slate-800 bg-slate-900 text-slate-100">
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir usuário?</AlertTitle>
+            <AlertDialogTitle>Excluir usuário?</AlertDialogTitle>
             <AlertDialogDescription className="text-slate-400">
               {confirmDelete
                 ? `Excluir definitivamente "${confirmDelete.name}"? Esta ação não pode ser desfeita.`
@@ -483,5 +483,3 @@ function Shell() {
   );
 }
 
-// Suppress accidental import lint — AlertTitle alias for above JSX typo guard
-const AlertTitle = AlertDialogTitle;
