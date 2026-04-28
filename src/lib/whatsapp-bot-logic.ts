@@ -328,6 +328,27 @@ export async function handleBotMessage(
   }
   const total = items.length;
 
+  // 3.5. RESET: se operador mandar "tomatoma" exato e já tiver run ativa,
+  // cancela a run atual e segue como se não houvesse run (vai criar nova).
+  // Isso destrava casos em que o operador ficou perdido no meio do fluxo.
+  const isResetTrigger =
+    inbound.kind === "text" && inbound.text.trim().toLowerCase() === "tomatoma";
+  if (run && isResetTrigger) {
+    await db
+      .from("checklist_runs")
+      .update({
+        status: "cancelled",
+        finished_at: new Date().toISOString(),
+      })
+      .eq("id", run.id);
+    await sendWhatsAppMessage(
+      fromPhone,
+      `🔄 Reiniciando seu checklist, ${user.name}… 🤠`,
+    );
+    // Deixa fluxo seguir como "sem run", o bloco abaixo vai criar uma nova.
+    (run as any) = null;
+  }
+
   // 4. Sem run ativa → exige gatilho explícito "tomatoma" + cooldown 12h + abre nova
   if (!run) {
     // Gatilho estrito: só `tomatoma` (lowercase, exato, sem nada antes/depois) inicia.
