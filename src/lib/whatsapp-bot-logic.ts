@@ -304,7 +304,7 @@ export async function handleBotMessage(
   }
 
   // 2. Run ativa?
-  const { data: run } = await db
+  const { data: runData } = await db
     .from("checklist_runs")
     .select("id, machine_id, started_at, status")
     .eq("operator_id", user.id)
@@ -312,6 +312,7 @@ export async function handleBotMessage(
     .order("started_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  let run: { id: string; machine_id: string; started_at: string; status: string } | null = runData ?? null;
 
   // 3. Catálogo
   const { data: items, error: itemsErr } = await db
