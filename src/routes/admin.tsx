@@ -1,4 +1,9 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  useNavigate,
+  useChildMatches,
+  Outlet,
+} from "@tanstack/react-router";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
@@ -11,9 +16,12 @@ export const Route = createFileRoute("/admin")({
 });
 
 function AdminPage() {
+  const childMatches = useChildMatches();
+  const hasChild = childMatches.length > 0;
+
   return (
     <ProtectedRoute roles={["admin"]}>
-      <DashboardShell title="Dashboard Admin" />
+      {hasChild ? <Outlet /> : <DashboardShell title="Dashboard Admin" />}
     </ProtectedRoute>
   );
 }
