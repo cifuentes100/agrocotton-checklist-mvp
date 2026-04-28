@@ -688,7 +688,8 @@ export async function sendMorningMessages(
   let query = db
     .from("users")
     .select("id, name, phone, morning_time, morning_enabled")
-    .eq("role", "operador");
+    .eq("role", "operador")
+    .eq("active", true);
 
   if (!force) {
     const hhmm = nowSaoPauloHHMM();
