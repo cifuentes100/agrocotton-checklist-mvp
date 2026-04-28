@@ -303,7 +303,11 @@ function Shell() {
                 {users.map((u) => (
                   <TableRow
                     key={u.id}
-                    className="border-slate-800 hover:bg-slate-800/40"
+                    className={
+                      u.active
+                        ? "border-slate-800 hover:bg-slate-800/40"
+                        : "border-slate-800 opacity-60 hover:bg-slate-800/40"
+                    }
                   >
                     <TableCell className="font-medium text-slate-100">
                       {u.name}
@@ -313,17 +317,25 @@ function Shell() {
                       {u.role}
                     </TableCell>
                     <TableCell className="text-slate-300">
-                      {timeToHHMM(u.morning_time)}
+                      <span
+                        className={
+                          u.morning_enabled
+                            ? "text-slate-300"
+                            : "text-slate-500 line-through"
+                        }
+                      >
+                        {timeToHHMM(u.morning_time)}
+                      </span>
                     </TableCell>
                     <TableCell>
                       <span
                         className={
-                          u.morning_enabled
-                            ? "text-emerald-400"
-                            : "text-slate-500"
+                          u.active
+                            ? "rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-400"
+                            : "rounded-full bg-slate-700/50 px-2 py-0.5 text-xs font-medium text-slate-400"
                         }
                       >
-                        {u.morning_enabled ? "Sim" : "Não"}
+                        {u.active ? "Ativo" : "Inativo"}
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
