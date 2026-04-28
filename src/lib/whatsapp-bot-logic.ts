@@ -108,7 +108,11 @@ export async function sendWhatsAppImage(
   caption?: string,
 ) {
   const token = process.env.WHAPI_TOKEN;
-  if (!token) return { ok: false, error: "WHAPI_TOKEN not configured" };
+  const logBody = caption ? `[image] ${caption}` : `[image] ${imageUrl}`;
+  if (!token) {
+    await logOutbound(to, "image", logBody, "error", "WHAPI_TOKEN not configured");
+    return { ok: false, error: "WHAPI_TOKEN not configured" };
+  }
   try {
     const res = await fetch("https://gate.whapi.cloud/messages/image", {
       method: "POST",
@@ -127,15 +131,16 @@ export async function sendWhatsAppImage(
       console.error(
         `[wa-bot] image send failed [${res.status}]: ${responseText}`,
       );
+      await logOutbound(to, "image", logBody, "error", `${res.status}: ${responseText.slice(0, 500)}`);
       return { ok: false, error: `${res.status}: ${responseText}` };
     }
+    await logOutbound(to, "image", logBody, "sent", null);
     return { ok: true, response: responseText };
   } catch (err) {
     console.error("[wa-bot] image send exception:", err);
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
+    const msg = err instanceof Error ? err.message : String(err);
+    await logOutbound(to, "image", logBody, "error", msg);
+    return { ok: false, error: msg };
   }
 }
 
