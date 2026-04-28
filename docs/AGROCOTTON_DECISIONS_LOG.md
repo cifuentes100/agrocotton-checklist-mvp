@@ -759,6 +759,94 @@ manualmente no Supabase — fica como próximo passo no STATUS.
 
 
 
+## ADR-022 — Server functions: imports server-only devem ser dinâmicos dentro do `.handler()`
+
+**Data:** 2026-04-28
+**Status:** ✅ Aceita e implementada
+
+**Contexto:**
+O botão "Gerenciar usuários" não abria nada. Diagnóstico: a rota
+`src/routes/admin.usuarios.tsx` importava `triggerMorningNow` de
+`src/server/morning.functions.ts`, que por sua vez importava no topo
+`@/lib/whatsapp-bot-logic` → `@/integrations/supabase/client.server`
+(módulo server-only que lê `SUPABASE_SERVICE_ROLE_KEY` de `process.env`
+e usa o cliente admin do Supabase).
+
+No TanStack Start, o handler de `createServerFn` é removido do bundle do
+cliente, **mas as importações de nível superior do arquivo do server function
+permanecem na cadeia**. Isso arrastava `whatsapp-bot-logic.ts` (731 linhas
+de lógica server) e `client.server.ts` para o chunk do cliente, quebrando
+a montagem do módulo virtual da rota com "Failed to fetch dynamically
+imported module: virtual:tanstack-start-client-entry". Sintoma final: clique
+em `<Link>` rejeita silenciosamente, UI não troca.
+
+**Decisão:**
+Qualquer arquivo em `src/server/*.functions.ts` que dependa de
+`@/integrations/supabase/client.server`, de `process.env` server-only ou de
+libs Node-only **deve** importar essas dependências via `await import(...)`
+**dentro do `.handler()`**, nunca no topo do arquivo. Imports estáticos no
+topo são reservados para tipos e utilitários cliente-safe (`createServerFn`,
+middlewares de auth, schemas Zod).
+
+Exemplo canônico:
+
+```ts
+import { createServerFn } from "@tanstack/react-start";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+
+export const triggerMorningNow = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    // Import dinâmico: mantém server-only fora do bundle do cliente
+    const { sendMorningMessages } = await import("@/lib/whatsapp-bot-logic");
+    return await sendMorningMessages({ force: true });
+  });
+```
+
+**Consequências:**
+- Previne classe inteira de bugs "tela em branco / botão não abre nada"
+- Obriga revisão de qualquer novo `*.functions.ts` antes do merge
+- Custo de runtime desprezível (import dinâmico cacheado pelo Worker)
+- Documentado também em `AGROCOTTON_STATUS.md` → Pontos de atenção
+
+---
+
+## ADR-023 — `AuthContext`: liberar `loading` no evento `INITIAL_SESSION`
+
+**Data:** 2026-04-28
+**Status:** ✅ Aceita e implementada
+
+**Contexto:**
+Após corrigir o vazamento server-only do ADR-022, a rota `/admin/usuarios`
+ainda ficava presa em "Carregando…". Causa: em dev/HMR, a Promise de
+`supabase.auth.getSession()` pode pendurar indefinidamente, e o
+`ProtectedRoute` depende do `loading` do `AuthContext` virar `false`.
+Esse comportamento é conhecido em `supabase-js` v2 com SSR/HMR.
+
+**Decisão:**
+O listener `onAuthStateChange` no `AuthContext` chama `setLoading(false)`
+imediatamente ao receber qualquer evento (incluindo `INITIAL_SESSION`),
+independente de `getSession()` resolver. O fetch de role continua assíncrono
+em background, mas a UI nunca fica refém do spinner.
+
+```ts
+const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+  if (!mounted) return;
+  setUser(session?.user ?? null);
+  setLoading(false); // libera ProtectedRoute mesmo se getSession() travar
+  // … fetch de role em seguida
+});
+```
+
+**Consequências:**
+- UI sai do spinner em todos os cenários (autenticado, anônimo, HMR travado)
+- Role pode chegar 1 frame depois — componentes que dependem de role
+  precisam tratar `role === null` como "ainda carregando role", não como
+  "sem permissão"
+- Caminho oficial recomendado pela equipe Supabase para SPAs
+
+---
+
 ## 📝 Template para próximas decisões
 
 ```
