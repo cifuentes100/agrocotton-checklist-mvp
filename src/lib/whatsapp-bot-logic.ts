@@ -584,19 +584,22 @@ export async function handleBotMessage(
     observation = trimmed;
   }
 
-  // Insert pendente (photo_path='', validation_status='pending_photo')
+  // Decisão (28/04/2026): RF-03 flexibilizado. OK fecha o item sem foto;
+  // NOK e texto livre seguem exigindo foto.
+  const isOk = status === "ok";
+
   const { error: respErr } = await db.from("item_responses").insert({
     run_id: run.id,
     item_id: currentItem.id,
     status,
     observation,
     photo_path: "",
-    validation_status: "pending_photo",
+    validation_status: isOk ? null : "pending_photo",
     answered_at: new Date().toISOString(),
   });
 
   if (respErr) {
-    console.error("[wa-bot] failed to insert pending response:", respErr);
+    console.error("[wa-bot] failed to insert response:", respErr);
     await sendWhatsAppMessage(
       fromPhone,
       "❌ Erro ao registrar resposta. Tente novamente.",
@@ -604,11 +607,41 @@ export async function handleBotMessage(
     return "bot:response_insert_failed";
   }
 
-  await sendWhatsAppMessage(
+  if (!isOk) {
+    await sendWhatsAppMessage(
+      fromPhone,
+      askForPhoto(completedCount + 1, total, currentItem.name),
+    );
+    return "bot:awaiting_photo_after_text";
+  }
+
+  // OK direto: fecha o item e avança (mesma lógica do AGUARDA_FOTO ao receber foto).
+  const newCompletedCount = completedCount + 1;
+  if (newCompletedCount >= total) {
+    await db
+      .from("checklist_runs")
+      .update({
+        status: "completed",
+        finished_at: new Date().toISOString(),
+      })
+      .eq("id", run.id);
+    await sendWhatsAppMessage(
+      fromPhone,
+      `🤠 Vamo cavalo! Checklist concluído (${total}/${total}).`,
+    );
+    return "bot:completed";
+  }
+
+  const next = items[newCompletedCount];
+  await sendWhatsAppMessage(fromPhone, `✅ OK`);
+  await sendItemQuestion(
     fromPhone,
-    askForPhoto(completedCount + 1, total, currentItem.name),
+    run.machine_id,
+    newCompletedCount + 1,
+    total,
+    next,
   );
-  return "bot:awaiting_photo_after_text";
+  return "bot:next_question_after_ok";
 }
 
 // -------------------- Morning trigger --------------------
