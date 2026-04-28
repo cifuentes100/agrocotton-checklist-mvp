@@ -168,6 +168,12 @@ ADR-008, ADR-010) e classificar os warnings pré-existentes do linter.
 - **Contador de horas de lubrificação (RF-35)**: ainda não existe fonte de dados.
   Definir: será manual (operador informa) ou integrado com a máquina? MVP provavelmente
   manual.
+- **Regra de bundling para server functions** (ADR-022): qualquer arquivo em
+  `src/server/*.functions.ts` que use `@/integrations/supabase/client.server`,
+  `process.env` server-only ou libs Node-only **deve** importar essas
+  dependências via `await import(...)` dentro do `.handler()`. Import estático
+  no topo vaza o módulo para o bundle do cliente e quebra a rota com
+  "Failed to fetch dynamically imported module".
 
 ---
 
