@@ -57,6 +57,7 @@ type ManagedUser = {
   role: string;
   morning_time: string; // "HH:MM:SS"
   morning_enabled: boolean;
+  active: boolean;
   created_at: string;
 };
 
@@ -66,6 +67,7 @@ type FormState = {
   role: string;
   morning_time: string; // "HH:MM"
   morning_enabled: boolean;
+  active: boolean;
 };
 
 const ROLES = [
@@ -82,6 +84,7 @@ function emptyForm(): FormState {
     role: "operador",
     morning_time: "05:30",
     morning_enabled: true,
+    active: true,
   };
 }
 
