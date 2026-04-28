@@ -1,95 +1,62 @@
 ## Diagnóstico
 
-**1. Cron das 5:30 nunca disparou — extensões `pg_cron` e `pg_net` não estão habilitadas.**
-Confirmei em `pg_extension`: vazio. A rota `/api/public/morning-trigger` existe e funciona, mas ninguém a chama. Logs `whatsapp_messages` das últimas 24h não tem nenhum outbound matinal — só conversas iniciadas manualmente.
+Quando você clica em "Gerenciar usuários", o navegador tenta carregar dinamicamente o chunk JS da rota `/admin/usuarios`. Esse carregamento está falhando com o erro:
 
-**2. Não existe tela de cadastro de usuários.** Tabela `public.users` tem RLS bloqueando INSERT/UPDATE/DELETE. Vou usar RPCs SECURITY DEFINER pro admin.
+```
+Failed to fetch dynamically imported module: virtual:tanstack-start-client-entry
+```
 
----
+### Causa raiz
 
-## Plano
+A rota `src/routes/admin.usuarios.tsx` importa, no topo do arquivo:
 
-### Parte A — Disparo automático com horário **por usuário**
+```ts
+import { triggerMorningNow } from "@/server/morning.functions";
+```
 
-1. **Migration schema**:
-   - Adicionar coluna `morning_time time NOT NULL DEFAULT '05:30'` em `public.users` (horário local Brasília).
-   - Adicionar coluna `morning_enabled boolean NOT NULL DEFAULT true` (pra desligar individualmente sem apagar).
-2. **Habilitar `pg_cron` + `pg_net`**.
-3. **Estratégia de agendamento**: como cada operador pode ter horário diferente, **não vou criar um job por usuário**. Vou criar **um job a cada minuto** que chama a rota `/api/public/morning-trigger`. A rota passa a:
-   - Calcular hora atual em America/Sao_Paulo (HH:MM).
-   - Selecionar operadores onde `morning_enabled=true AND morning_time = HH:MM:00`.
-   - Enviar bom-dia só pra esses.
-   - Anti-duplicata: gravar em tabela nova `morning_dispatches(user_id, dispatched_on date, dispatched_at timestamptz)` com unique `(user_id, dispatched_on)` pra evitar disparo duplo se o cron rodar 2x no mesmo minuto.
-4. **Botão "Disparar bom-dia agora"** no admin: server function `triggerMorningNow` que valida `current_role()='admin'` e força envio pra todos operadores (ignora horário e anti-duplicata).
+Esse arquivo (`src/server/morning.functions.ts`) importa `@/lib/whatsapp-bot-logic`, que por sua vez importa `@/integrations/supabase/client.server` — um módulo **exclusivo de servidor** que lê `SUPABASE_SERVICE_ROLE_KEY` do `process.env` e usa o cliente admin do Supabase (bypass de RLS).
 
-### Parte B — Tela de cadastro de usuários (`/admin/usuarios`)
+No TanStack Start, o handler de `createServerFn` é removido do bundle do cliente, **mas as importações de nível superior do arquivo do server function permanecem na cadeia**. Quando o cliente tenta carregar a rota, o bundler arrasta `whatsapp-bot-logic.ts` (731 linhas de lógica de servidor) e `client.server.ts` para o chunk do cliente, o que quebra a montagem do módulo virtual da rota e causa o "Failed to fetch dynamically imported module".
 
-1. **RPCs SECURITY DEFINER** (validam `current_role()='admin'`):
-   - `admin_list_users()` → retorna todos.
-   - `admin_create_user(_name, _phone, _role, _morning_time, _morning_enabled)`.
-   - `admin_update_user(_id, _name, _phone, _role, _morning_time, _morning_enabled)`.
-   - `admin_delete_user(_id)` — bloqueia auto-delete.
-   - Normalizam phone (`+` na frente, só dígitos), validam role ∈ {operador, mecanico, implantador, admin}.
-2. **Rota `src/routes/admin.usuarios.tsx`**:
-   - Tabela: nome, telefone, role, **horário do bom-dia**, **ativo (toggle)**, ações.
-   - Botão "Novo usuário" → dialog com form: name, phone, role (Select), **morning_time (input type="time", default 05:30)**, **morning_enabled (Switch)**.
-   - Editar inline ou via dialog.
-   - Botão "Disparar bom-dia agora" no topo.
-   - Guarded por admin.
-3. **Link no menu** `src/routes/admin.tsx`.
+Esse é exatamente o tipo de erro que aparece como tela em branco / botão que "não faz nada" — porque o `<Link>`/`navigate` dispara o import dinâmico, ele rejeita silenciosamente, e a UI não troca.
 
----
+## Plano de correção
+
+1. **Isolar o server function em um arquivo dedicado e seguro para o cliente importar**
+   - Manter `src/server/morning.functions.ts` apenas com o `createServerFn` e suas dependências de tipos.
+   - Mover a importação de `sendMorningMessages` (`@/lib/whatsapp-bot-logic`) para **dentro do `.handler(...)`** usando `await import("@/lib/whatsapp-bot-logic")` (import dinâmico). Assim o módulo de servidor pesado nunca entra no grafo do cliente.
+
+2. **Validar que o chunk da rota carrega**
+   - Após o ajuste, abrir `/admin/usuarios` direto pela URL e via botão "Gerenciar usuários" para confirmar.
+
+3. **Como prática geral neste projeto**: qualquer arquivo em `src/server/*.functions.ts` que use `client.server` ou libs Node-only deve fazer essas importações dinamicamente dentro do `.handler()`, nunca no topo do arquivo.
 
 ## Detalhes técnicos
 
-**Migration schema** (via migration tool):
-```sql
-ALTER TABLE public.users
-  ADD COLUMN morning_time time NOT NULL DEFAULT '05:30',
-  ADD COLUMN morning_enabled boolean NOT NULL DEFAULT true;
+Mudança proposta em `src/server/morning.functions.ts`:
 
-CREATE TABLE public.morning_dispatches (
-  user_id uuid NOT NULL,
-  dispatched_on date NOT NULL,
-  dispatched_at timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (user_id, dispatched_on)
-);
-ALTER TABLE public.morning_dispatches ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "admin le dispatches" ON public.morning_dispatches FOR SELECT
-  TO authenticated USING (public.current_role()='admin');
+```ts
+import { createServerFn } from "@tanstack/react-start";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+
+export const triggerMorningNow = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+
+    const { data: caller } = await supabase
+      .from("users").select("role").eq("id", userId).maybeSingle();
+
+    if (!caller || caller.role !== "admin") {
+      throw new Error("Apenas admin pode disparar bom-dia manualmente");
+    }
+
+    // Import dinâmico: mantém whatsapp-bot-logic e client.server FORA do bundle do cliente
+    const { sendMorningMessages } = await import("@/lib/whatsapp-bot-logic");
+    return await sendMorningMessages({ force: true });
+  });
 ```
 
-**Migration cron** (via insert tool, contém token):
-```sql
-CREATE EXTENSION IF NOT EXISTS pg_cron;
-CREATE EXTENSION IF NOT EXISTS pg_net;
+Não é necessário alterar `admin.usuarios.tsx`, `whatsapp-bot-logic.ts` nem `client.server.ts`.
 
-SELECT cron.schedule(
-  'morning-checklist-trigger',
-  '* * * * *',  -- a cada minuto; rota filtra pelo horário do usuário
-  $$
-  SELECT net.http_post(
-    url := 'https://agrocheck-hub.lovable.app/api/public/morning-trigger?token=<WEBHOOK_SECRET>',
-    headers := '{"Content-Type":"application/json"}'::jsonb,
-    body := '{}'::jsonb
-  );
-  $$
-);
-```
-
-**Mudança em `sendMorningMessages`** (`src/lib/whatsapp-bot-logic.ts`):
-- Aceita parâmetro opcional `{ force?: boolean }`.
-- Se `force=false` (cron): query `users` com `role='operador' AND morning_enabled=true AND morning_time = (now() AT TIME ZONE 'America/Sao_Paulo')::time(0)` truncado pro minuto; antes de enviar, tenta `INSERT` em `morning_dispatches` — se conflitar, pula.
-- Se `force=true` (botão admin): envia pra todos operadores.
-
----
-
-## Resultado esperado
-
-- Cada operador tem seu próprio horário de bom-dia configurável pelo admin.
-- Esposa pode receber 05:30, outro operador às 06:00, etc.
-- Admin tem `/admin/usuarios` com CRUD completo + horário + toggle on/off.
-- Botão "disparar agora" pra testes.
-- Anti-duplicata: ninguém recebe 2x no mesmo dia.
-
-Aprova?
+Posso aplicar?
