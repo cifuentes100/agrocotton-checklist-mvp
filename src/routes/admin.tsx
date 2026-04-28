@@ -37,6 +37,13 @@ function DashboardShell({ title }: { title: string }) {
 
       <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
         <Button
+          onClick={() => navigate({ to: "/admin/usuarios" as never })}
+          className="font-semibold"
+          style={{ backgroundColor: "#a78bfa", color: "#0f172a" }}
+        >
+          Gerenciar usuários
+        </Button>
+        <Button
           onClick={() => navigate({ to: "/implantador/maquinas" })}
           variant="outline"
           className="border-2 bg-transparent font-semibold hover:bg-violet-500/10"
