@@ -628,34 +628,104 @@ export async function handleBotMessage(
 
 // -------------------- Morning trigger --------------------
 
-export async function sendMorningMessages(): Promise<{
+function nowSaoPauloHHMM(): string {
+  const fmt = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(new Date());
+  const hh = parts.find((p) => p.type === "hour")?.value ?? "00";
+  const mm = parts.find((p) => p.type === "minute")?.value ?? "00";
+  return `${hh}:${mm}:00`;
+}
+
+function todaySaoPauloDate(): string {
+  // en-CA → "YYYY-MM-DD"
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+/**
+ * Envia "bom dia" para operadores.
+ *  - force=false (cron a cada minuto): filtra por morning_enabled=true e
+ *    morning_time = HH:MM atual em São Paulo. Anti-duplicata diária via
+ *    morning_dispatches (unique user_id+dispatched_on).
+ *  - force=true (botão admin): envia pra todos operadores, ignorando filtro
+ *    e dedup. Usado pra teste manual.
+ */
+export async function sendMorningMessages(
+  opts: { force?: boolean } = {},
+): Promise<{
   sent: number;
+  skipped: number;
   errors: string[];
 }> {
   const db = supabaseAdmin as any;
-  const { data: operators, error } = await db
+  const force = opts.force === true;
+
+  let query = db
     .from("users")
-    .select("id, name, phone")
+    .select("id, name, phone, morning_time, morning_enabled")
     .eq("role", "operador");
 
+  if (!force) {
+    const hhmm = nowSaoPauloHHMM();
+    query = query.eq("morning_enabled", true).eq("morning_time", hhmm);
+  }
+
+  const { data: operators, error } = await query;
   if (error) {
-    return { sent: 0, errors: [`query failed: ${error.message}`] };
+    return { sent: 0, skipped: 0, errors: [`query failed: ${error.message}`] };
   }
 
   let sent = 0;
+  let skipped = 0;
   const errors: string[] = [];
+  const today = todaySaoPauloDate();
+
   for (const op of operators ?? []) {
     if (!op.phone) {
       errors.push(`${op.name ?? op.id}: no phone`);
       continue;
     }
+
+    if (!force) {
+      const { error: dedupErr } = await db
+        .from("morning_dispatches")
+        .insert({ user_id: op.id, dispatched_on: today });
+      if (dedupErr) {
+        if ((dedupErr as any).code === "23505") {
+          skipped++;
+          continue;
+        }
+        errors.push(`${op.name ?? op.id}: dedup ${dedupErr.message}`);
+        continue;
+      }
+    }
+
     const phoneWithoutPlus = String(op.phone).replace("+", "");
     const r = await sendWhatsAppMessage(
       phoneWithoutPlus,
-      `Bom dia, ${op.name}! 🌅 Hora do checklist. Responda qualquer coisa para iniciar.`,
+      `Bom dia, ${op.name}! 🌅 Hora do checklist. Manda *tomatoma* (em minúsculas) pra começar.`,
     );
-    if (r.ok) sent++;
-    else errors.push(`${op.name ?? op.id}: ${r.error}`);
+    if (r.ok) {
+      sent++;
+    } else {
+      errors.push(`${op.name ?? op.id}: ${r.error}`);
+      if (!force) {
+        await db
+          .from("morning_dispatches")
+          .delete()
+          .eq("user_id", op.id)
+          .eq("dispatched_on", today);
+      }
+    }
   }
-  return { sent, errors };
+  return { sent, skipped, errors };
 }
