@@ -15,11 +15,10 @@
  *    "checklist de hoje já foi feito" e não cria novo. (machines.status fica 'ready'
  *    sempre — só vira 'maintenance' quando mecânico flipa).
  *  - Resposta de texto:
- *      "ok"  → status='ok'
- *      "nok" → status='nok'
- *      qualquer outra coisa → status='observar', observation=texto
- *  - Após texto, bot pede foto. RF-03 exige foto em TODOS os status.
- *  - Quando todos os 12 itens completam (texto+foto), run vira 'completed' e bot
+ *      "ok"  → status='ok'   → fecha item SEM foto, avança pra próxima pergunta.
+ *      "nok" → status='nok'  → exige foto (RF-03 flexibilizado em 28/04/2026).
+ *      qualquer outra coisa → status='observar', observation=texto, exige foto.
+ *  - Quando todos os 12 itens completam, run vira 'completed' e bot
  *    fecha com "🤠 Vamo cavalo!" (RF-31).
  *
  * IMPORTANTE: phones em `users` são salvos COM '+', ex: "+556299677410".
