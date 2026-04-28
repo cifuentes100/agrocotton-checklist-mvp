@@ -68,24 +68,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     (async () => {
-      const { data } = await supabase.auth.getSession();
-      const session: Session | null = data.session;
-      if (!mounted) return;
-      const nextUser = session?.user ?? null;
-      setUser(nextUser);
-
-      if (nextUser) {
-        const r = await fetchRole(nextUser.id);
+      try {
+        const { data } = await supabase.auth.getSession();
+        const session: Session | null = data.session;
         if (!mounted) return;
-        if (!r) {
-          await supabase.auth.signOut();
-          setUser(null);
-          setRole(null);
-        } else {
-          setRole(r);
+        const nextUser = session?.user ?? null;
+        setUser(nextUser);
+
+        if (nextUser) {
+          const r = await fetchRole(nextUser.id);
+          if (!mounted) return;
+          if (!r) {
+            await supabase.auth.signOut();
+            setUser(null);
+            setRole(null);
+          } else {
+            setRole(r);
+          }
         }
+      } catch (error) {
+        console.error("Erro ao carregar sessão", error);
+        if (!mounted) return;
+        setUser(null);
+        setRole(null);
+      } finally {
+        if (mounted) setLoading(false);
       }
-      setLoading(false);
     })();
 
     return () => {
