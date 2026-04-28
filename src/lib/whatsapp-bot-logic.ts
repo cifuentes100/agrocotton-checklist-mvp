@@ -292,6 +292,7 @@ export async function handleBotMessage(
     .select("id, name, phone, role")
     .eq("phone", phoneWithPlus)
     .eq("role", "operador")
+    .eq("active", true)
     .maybeSingle();
 
   if (!user) {
