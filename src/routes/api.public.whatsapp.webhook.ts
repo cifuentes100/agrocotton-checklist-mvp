@@ -183,6 +183,22 @@ async function handleSingleMessage(msg: WhapiMessage): Promise<string> {
     status: "received",
   });
 
+  // ALLOWLIST: silêncio total para qualquer telefone que não seja operador
+  // ativo cadastrado em `users`. Inbound já foi logado acima para auditoria.
+  // Esta checagem precisa rodar ANTES do roteamento por tipo, senão tipos
+  // não suportados (voice/video/sticker/etc) recebem aviso indevido.
+  const phoneWithPlus = `+${phone}`;
+  const { data: knownUser } = await db
+    .from("users")
+    .select("id")
+    .eq("phone", phoneWithPlus)
+    .eq("role", "operador")
+    .eq("active", true)
+    .maybeSingle();
+  if (!knownUser) {
+    return "skip:phone_not_registered";
+  }
+
   // Monta payload para o bot conforme o tipo de mensagem.
   // Suportamos: text e image (RF-03). Outros tipos: aviso curto e fim.
   let inbound: WhatsAppInbound;
